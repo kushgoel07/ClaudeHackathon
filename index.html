@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+  <title>Vita — AI Health Coach</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles/app.css">
+  <meta name="theme-color" content="#0d0d1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Vita">
+</head>
+<body>
+
+<script>
+  const _key = '__ANTHROPIC_KEY__';
+  const _gid = '__GOOGLE_CLIENT_ID__';
+  if (_key && _key !== '__ANTHROPIC_KEY__' && !localStorage.getItem('vita_api_key')) {
+    localStorage.setItem('vita_api_key', _key);
+  }
+  window._vitaConfig = {
+    anthropicKey: localStorage.getItem('vita_api_key') || _key,
+    googleClientId: _gid !== '__GOOGLE_CLIENT_ID__' ? _gid : ''
+  };
+</script>
+
+<script src="https://accounts.google.com/gsi/client" async onload="typeof cal_init==='function'&&cal_init()"></script>
+
+<div class="phone">
+  <div class="notch"></div>
+
+  <!-- ═══ ONBOARDING ═══ -->
+  <div class="screen active" id="screen-onboarding">
+    <div id="ob-wrap"></div>
+  </div>
+
+  <!-- ═══ HOME ═══ -->
+  <div class="screen" id="screen-home">
+    <div class="status">
+      <span class="status-time" id="status-time-home">9:41</span>
+      <div class="status-right"><div class="batt"></div></div>
+    </div>
+    <div class="offline-banner" id="offline-banner">No connection — changes saved locally</div>
+    <div class="scroll-content">
+      <div class="home-header">
+        <div class="home-eyebrow" id="home-date">Today</div>
+        <div class="home-title">Good morning,<br><em id="home-name">there</em></div>
+        <div class="pill" id="travel-pill" style="display:none">
+          <div class="pill-dot"></div>
+          <span class="pill-text" id="travel-pill-text">Travel mode active</span>
+        </div>
+      </div>
+
+      <div class="cal-card">
+        <div class="card-label">Today's intake</div>
+        <div class="cal-body">
+          <div class="ring-wrap">
+            <svg width="86" height="86" viewBox="0 0 86 86">
+              <circle cx="43" cy="43" r="32" fill="none" stroke="var(--surface2)" stroke-width="7"/>
+              <circle cx="43" cy="43" r="32" fill="none" stroke="var(--accent)" stroke-width="7"
+                stroke-dasharray="201" stroke-dashoffset="201" stroke-linecap="round"
+                transform="rotate(-90 43 43)" id="cal-ring-fill" style="transition:stroke-dashoffset 0.6s ease-out"/>
+            </svg>
+            <div class="ring-center">
+              <div class="ring-num" id="ring-kcal">0</div>
+              <div class="ring-of" id="ring-goal">/ 2000</div>
+            </div>
+          </div>
+          <div class="macro-list">
+            <div class="macro-row">
+              <div class="macro-row-top"><span class="macro-name">Protein</span><span class="macro-val" id="macro-protein">0 / 120g</span></div>
+              <div class="bar-track"><div class="bar-fill" id="bar-protein" style="width:0%;background:var(--accent)"></div></div>
+            </div>
+            <div class="macro-row">
+              <div class="macro-row-top"><span class="macro-name">Carbs</span><span class="macro-val" id="macro-carbs">0 / 220g</span></div>
+              <div class="bar-track"><div class="bar-fill" id="bar-carbs" style="width:0%;background:#4a80d4"></div></div>
+            </div>
+            <div class="macro-row">
+              <div class="macro-row-top"><span class="macro-name">Fat</span><span class="macro-val" id="macro-fat">0 / 70g</span></div>
+              <div class="bar-track"><div class="bar-fill" id="bar-fat" style="width:0%;background:#9980d4"></div></div>
+            </div>
+            <div class="macro-row">
+              <div class="macro-row-top"><span class="macro-name">Water</span><span class="macro-val" id="macro-water">0 / 2L</span></div>
+              <div class="bar-track"><div class="bar-fill" id="bar-water" style="width:0%;background:var(--sky)"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="coach-card" onclick="app.switchScreen('coach')" id="coach-hint-card">
+        <div class="coach-card-top"><div class="coach-dot"></div><span class="coach-label">Aria · Coach</span></div>
+        <div class="coach-msg" id="coach-hint-msg">Tap to chat with your AI health coach — she knows your schedule and goals.</div>
+      </div>
+
+      <div class="section-header">
+        <div class="section-title">Today's log</div>
+        <div class="section-link" onclick="app.switchScreen('log')">Add</div>
+      </div>
+      <div id="today-log-list">
+        <div class="empty-log">No meals logged yet.<br>Tap Log to add your first meal.</div>
+      </div>
+
+      <div class="section-header" style="margin-top:8px;display:none" id="cal-section-header">
+        <div class="section-title">Schedule context</div>
+        <div class="section-link" onclick="calendarClient.reconnect()">Sync</div>
+      </div>
+      <div class="cal-strip" id="cal-strip" style="display:none">
+        <div class="cal-strip-head">Today's calendar</div>
+        <div id="cal-events-list"></div>
+      </div>
+
+      <div style="height:20px"></div>
+    </div>
+
+    <div class="bottom-nav">
+      <div class="nav-item active" onclick="app.switchScreen('home')">
+        <div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+        <div class="nav-label">Today</div>
+      </div>
+      <div class="nav-item" onclick="app.switchScreen('log')">
+        <div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
+        <div class="nav-label">Log</div>
+      </div>
+      <div class="nav-item" onclick="app.switchScreen('coach')">
+        <div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <div class="nav-label">Coach</div>
+      </div>
+      <div class="nav-item" onclick="app.switchScreen('profile')">
+        <div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+        <div class="nav-label">Profile</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ LOG ═══ -->
+  <div class="screen" id="screen-log">
+
+    <!-- Voice overlay -->
+    <div class="listening-overlay" id="listening-overlay">
+      <div class="mic-visual">
+        <div class="mic-ring-outer"></div>
+        <div class="mic-ring-mid"></div>
+        <div class="mic-core">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M19 10a7 7 0 0 1-14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
+        </div>
+      </div>
+      <div class="waveform">
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+      </div>
+      <div class="listening-label">Listening</div>
+      <div class="listening-sub" id="transcript-text">Say what you ate…</div>
+      <div class="listening-cancel" onclick="voiceInput.stop()">Cancel</div>
+    </div>
+
+    <!-- Camera overlay -->
+    <div class="camera-overlay" id="camera-overlay">
+      <div class="camera-header">
+        <div class="camera-cancel" onclick="photoInput.cancel()">Cancel</div>
+        <div class="camera-title">Photo Log</div>
+        <div style="width:44px"></div>
+      </div>
+      <div class="camera-viewfinder">
+        <video id="camera-video" autoplay playsinline></video>
+        <canvas id="camera-canvas" style="display:none"></canvas>
+        <img id="camera-preview" style="display:none;width:100%;height:100%;object-fit:cover" alt="">
+      </div>
+      <div class="camera-controls">
+        <div class="shutter-btn" id="shutter-btn" onclick="photoInput.capture()">
+          <div class="shutter-inner"></div>
+        </div>
+        <div class="retake-btn" id="retake-btn" style="display:none" onclick="photoInput.retake()">Retake</div>
+      </div>
+      <div class="photo-confirm" id="photo-confirm" style="display:none">
+        <button class="btn-primary" onclick="photoInput.confirm()">Analyze this meal</button>
+      </div>
+    </div>
+
+    <div class="status"><span class="status-time">9:41</span><div class="status-right"><div class="batt"></div></div></div>
+    <div class="scroll-content">
+      <div class="log-screen-header">
+        <div class="log-screen-title">Log food</div>
+        <div class="log-screen-sub">Voice, photo, or type</div>
+      </div>
+
+      <div class="action-row">
+        <div class="action-btn" id="voice-btn" onclick="voiceInput.start()">
+          <div class="action-icon voice">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M19 10a7 7 0 0 1-14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
+          </div>
+          <div class="action-btn-label">Voice</div>
+          <div class="action-btn-sub">Tap and speak</div>
+        </div>
+        <div class="action-btn" onclick="photoInput.start()">
+          <div class="action-icon photo">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--sky)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M3 9a2 2 0 0 1 2-2h.93a2 2 0 0 0 1.66-.89l.82-1.22A2 2 0 0 1 10.07 4h3.86a2 2 0 0 1 1.66.89l.82 1.22A2 2 0 0 0 18.07 7H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          </div>
+          <div class="action-btn-label">Photo</div>
+          <div class="action-btn-sub">AI reads your meal</div>
+        </div>
+      </div>
+
+      <!-- Processing spinner -->
+      <div class="processing-card" id="processing-card" style="display:none">
+        <div class="processing-dots">
+          <div class="proc-dot"></div><div class="proc-dot"></div><div class="proc-dot"></div>
+        </div>
+        <div class="processing-text" id="processing-text">Analyzing…</div>
+      </div>
+
+      <!-- Parsed result -->
+      <div class="parsed-card" id="parsed-card">
+        <div class="parsed-head">
+          <div class="parsed-check">
+            <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#1d9e75" stroke-width="2.2" stroke-linecap="round"><polyline points="2 6 5 9 10 3"/></svg>
+          </div>
+          <span class="parsed-lbl">Aria identified</span>
+        </div>
+        <div class="parsed-food" id="parsed-food-name">Loading…</div>
+        <div class="parsed-macros">
+          <div class="parsed-macro"><div class="parsed-macro-val" id="pm-cal">—</div><div class="parsed-macro-name">kcal</div></div>
+          <div class="parsed-macro"><div class="parsed-macro-val" id="pm-pro">—</div><div class="parsed-macro-name">protein</div></div>
+          <div class="parsed-macro"><div class="parsed-macro-val" id="pm-carb">—</div><div class="parsed-macro-name">carbs</div></div>
+          <div class="parsed-macro"><div class="parsed-macro-val" id="pm-fat">—</div><div class="parsed-macro-name">fat</div></div>
+        </div>
+        <div class="parsed-note" id="parsed-note"></div>
+        <button class="parsed-confirm" onclick="vitaApp.confirmLog()">Add to log</button>
+      </div>
+
+      <!-- Text input -->
+      <div class="text-log-wrap">
+        <div class="text-log-label">Type it in</div>
+        <div class="text-log-row">
+          <input class="text-log-input" id="text-log-input" type="text"
+            placeholder='e.g. "large latte and a banana"' maxlength="500"
+            onkeydown="if(event.key==='Enter')vitaApp.handleTextLog()">
+          <button class="text-log-btn" onclick="vitaApp.handleTextLog()">Log</button>
+        </div>
+      </div>
+
+      <!-- Water chips -->
+      <div class="chip-section">
+        <div class="chip-section-label">Log water</div>
+        <div class="chip-grid">
+          <div class="chip" onclick="vitaApp.logWater(0.25)">250ml</div>
+          <div class="chip" onclick="vitaApp.logWater(0.5)">500ml</div>
+          <div class="chip" onclick="vitaApp.logWater(1)">1L</div>
+        </div>
+      </div>
+
+      <!-- Quick add chips -->
+      <div class="chip-section">
+        <div class="chip-section-label">Quick add</div>
+        <div class="chip-grid">
+          <div class="chip" onclick="vitaApp.quickLog('Black coffee')">Black coffee</div>
+          <div class="chip" onclick="vitaApp.quickLog('Banana')">Banana</div>
+          <div class="chip" onclick="vitaApp.quickLog('Protein bar, 200 calories')">Protein bar</div>
+          <div class="chip" onclick="vitaApp.quickLog('Apple')">Apple</div>
+          <div class="chip" onclick="vitaApp.quickLog('Protein shake with 30g protein powder')">Protein shake</div>
+          <div class="chip" onclick="vitaApp.quickLog('Greek yogurt, plain, 150g')">Greek yogurt</div>
+          <div class="chip" onclick="vitaApp.quickLog('2 scrambled eggs')">Eggs</div>
+          <div class="chip" onclick="vitaApp.quickLog('Grilled chicken breast 150g')">Chicken</div>
+          <div class="chip" onclick="vitaApp.quickLog('Handful of almonds')">Almonds</div>
+        </div>
+      </div>
+      <div style="height:20px"></div>
+    </div>
+
+    <div class="bottom-nav">
+      <div class="nav-item" onclick="app.switchScreen('home')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div><div class="nav-label">Today</div></div>
+      <div class="nav-item active" onclick="app.switchScreen('log')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div><div class="nav-label">Log</div></div>
+      <div class="nav-item" onclick="app.switchScreen('coach')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div class="nav-label">Coach</div></div>
+      <div class="nav-item" onclick="app.switchScreen('profile')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="nav-label">Profile</div></div>
+    </div>
+  </div>
+
+  <!-- ═══ COACH ═══ -->
+  <div class="screen" id="screen-coach">
+    <div class="status"><span class="status-time">9:41</span><div class="status-right"><div class="batt"></div></div></div>
+    <div class="coach-header">
+      <div class="coach-header-title">Aria</div>
+      <div class="coach-header-sub">Knows your calendar, goals, and log</div>
+      <div class="coach-online"><div class="coach-online-dot"></div><span class="coach-online-text">Context updated now</span></div>
+    </div>
+
+    <div class="chat-messages" id="chat-messages"></div>
+
+    <div class="suggest-chips">
+      <div class="suggest-chip" onclick="vitaApp.sendCoachMessage('Am I on track today?')">On track?</div>
+      <div class="suggest-chip" onclick="vitaApp.sendCoachMessage('What should I eat next?')">What to eat?</div>
+      <div class="suggest-chip" onclick="vitaApp.sendCoachMessage('How much water should I drink today?')">Water goal?</div>
+      <div class="suggest-chip" onclick="vitaApp.sendCoachMessage('Give me a quick high-protein snack idea')">Snack idea?</div>
+      <div class="suggest-chip" onclick="vitaApp.sendCoachMessage('How am I doing on protein today?')">Protein check?</div>
+      <div class="suggest-chip" onclick="vitaApp.sendCoachMessage('What should I know about eating before exercise?')">Pre-workout?</div>
+    </div>
+
+    <div class="chat-input-row">
+      <input class="chat-input" id="chat-input" type="text" placeholder="Ask Aria anything…"
+        onkeydown="if(event.key==='Enter')vitaApp.sendCoachMessage()">
+      <button class="chat-send" onclick="vitaApp.sendCoachMessage()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+      </button>
+    </div>
+
+    <div class="bottom-nav">
+      <div class="nav-item" onclick="app.switchScreen('home')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div><div class="nav-label">Today</div></div>
+      <div class="nav-item" onclick="app.switchScreen('log')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div><div class="nav-label">Log</div></div>
+      <div class="nav-item active" onclick="app.switchScreen('coach')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div class="nav-label">Coach</div></div>
+      <div class="nav-item" onclick="app.switchScreen('profile')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="nav-label">Profile</div></div>
+    </div>
+  </div>
+
+  <!-- ═══ PROFILE ═══ -->
+  <div class="screen" id="screen-profile">
+    <div class="status"><span class="status-time">9:41</span><div class="status-right"><div class="batt"></div></div></div>
+    <div class="scroll-content">
+      <div class="profile-top-section">
+        <div class="profile-row">
+          <div class="profile-avatar"><span class="avatar-initials" id="profile-initials">?</span></div>
+          <div>
+            <div class="profile-name" id="profile-name-display">Your Name</div>
+            <div class="profile-role" id="profile-goal-display">Goal not set</div>
+          </div>
+        </div>
+        <div class="streak-badge"><span class="streak-text" id="streak-text">0-day streak</span></div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-card"><div class="stat-val" id="stat-kcal">2000</div><div class="stat-lbl">Cal goal</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-protein">120g</div><div class="stat-lbl">Protein</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-water">2L</div><div class="stat-lbl">Water</div></div>
+      </div>
+
+      <div class="section-header"><div class="section-title">Integrations</div></div>
+      <div class="settings-section">
+        <div class="settings-row">
+          <div class="settings-left">
+            <div class="settings-icon-wrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+            <div class="settings-name">Google Calendar</div>
+          </div>
+          <div class="toggle" id="cal-toggle" onclick="calendarClient.toggleConnection()"></div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-left">
+            <div class="settings-icon-wrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+            <div class="settings-name">Smart notifications</div>
+          </div>
+          <div class="toggle" id="notif-toggle" onclick="notificationManager.toggle()"></div>
+        </div>
+        <div class="settings-row" onclick="vitaApp.resetOnboarding()">
+          <div class="settings-left">
+            <div class="settings-icon-wrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+            <div class="settings-name">Edit profile &amp; goals</div>
+          </div>
+          <div class="caret">›</div>
+        </div>
+      </div>
+
+      <div class="section-header" style="margin-top:10px"><div class="section-title">API Setup</div></div>
+      <div class="settings-section">
+        <div class="settings-row" onclick="vitaApp.showApiKeyEditor()">
+          <div class="settings-left">
+            <div class="settings-icon-wrap">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+            </div>
+            <div class="settings-name">Anthropic API Key</div>
+          </div>
+          <div class="settings-val" id="api-key-status">Not set</div>
+        </div>
+      </div>
+
+      <div style="height:20px"></div>
+    </div>
+
+    <div class="bottom-nav">
+      <div class="nav-item" onclick="app.switchScreen('home')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div><div class="nav-label">Today</div></div>
+      <div class="nav-item" onclick="app.switchScreen('log')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div><div class="nav-label">Log</div></div>
+      <div class="nav-item" onclick="app.switchScreen('coach')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div class="nav-label">Coach</div></div>
+      <div class="nav-item active" onclick="app.switchScreen('profile')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="nav-label">Profile</div></div>
+    </div>
+  </div>
+
+</div><!-- /.phone -->
+
+<!-- API Key Modal -->
+<div class="modal-overlay" id="api-key-modal" style="display:none" onclick="if(event.target===this)vitaApp.closeModal('api-key-modal')">
+  <div class="modal">
+    <div class="modal-title">Anthropic API Key</div>
+    <div class="modal-sub">Get yours free at console.anthropic.com</div>
+    <input class="modal-input" id="api-key-input" type="password" placeholder="sk-ant-..."
+      onkeydown="if(event.key==='Enter')vitaApp.saveApiKey()">
+    <button class="btn-primary modal-btn" onclick="vitaApp.saveApiKey()">Save key</button>
+    <button class="btn-ghost modal-btn" onclick="vitaApp.closeModal('api-key-modal')">Cancel</button>
+  </div>
+</div>
+
+<script>
+  window.addEventListener('online',  () => document.getElementById('offline-banner')?.classList.remove('visible'));
+  window.addEventListener('offline', () => document.getElementById('offline-banner')?.classList.add('visible'));
+</script>
+
+<script>
+// ═══ LOG STORE ═══
+const DB_NAME='vita-db',DB_VERSION=1;let _db=null;
+async function openDB(){if(_db)return _db;return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=e=>{const d=e.target.result;if(!d.objectStoreNames.contains('profile'))d.createObjectStore('profile');if(!d.objectStoreNames.contains('foodLog')){const s=d.createObjectStore('foodLog',{autoIncrement:true,keyPath:'id'});s.createIndex('date','date',{unique:false});}if(!d.objectStoreNames.contains('waterLog')){const s=d.createObjectStore('waterLog',{autoIncrement:true,keyPath:'id'});s.createIndex('date','date',{unique:false});}if(!d.objectStoreNames.contains('chatHistory'))d.createObjectStore('chatHistory',{autoIncrement:true,keyPath:'id'});if(!d.objectStoreNames.contains('settings'))d.createObjectStore('settings');};r.onsuccess=e=>{_db=e.target.result;res(_db);};r.onerror=()=>rej(r.error);});}
+function _tx(s,m='readonly'){return _db.transaction(s,m).objectStore(s);}
+function promisify(r){return new Promise((res,rej)=>{r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+async function ls_getProfile(){await openDB();const p=await promisify(_tx('profile').get('profile'));return p||{name:'Friend',age:30,sex:'prefer not to say',primaryGoal:'Maintain weight',calGoal:2000,proteinGoal:120,carbGoal:220,fatGoal:70,fiberGoal:25,waterGoal:2};}
+async function ls_saveProfile(p){await openDB();return promisify(_tx('profile','readwrite').put(p,'profile'));}
+async function ls_getTodayLog(){await openDB();const t=new Date().toISOString().slice(0,10);const all=await promisify(_tx('foodLog').getAll());return all.filter(e=>e.date===t);}
+async function ls_addMeal(meal){await openDB();const e={date:new Date().toISOString().slice(0,10),time:new Date().toTimeString().slice(0,5),...meal,source:meal.source||'manual'};const id=await promisify(_tx('foodLog','readwrite').add(e));return{...e,id};}
+async function ls_deleteMeal(id){await openDB();return promisify(_tx('foodLog','readwrite').delete(id));}
+async function ls_getTodayWater(){await openDB();const t=new Date().toISOString().slice(0,10);const all=await promisify(_tx('waterLog').getAll());return all.filter(e=>e.date===t).reduce((s,e)=>s+(e.amount_l||0),0);}
+async function ls_addWater(amount_l){await openDB();return promisify(_tx('waterLog','readwrite').add({date:new Date().toISOString().slice(0,10),time:new Date().toTimeString().slice(0,5),amount_l}));}
+async function ls_getChatHistory(){await openDB();const all=await promisify(_tx('chatHistory').getAll());return all.slice(-30);}
+async function ls_addChatMessage(role,text){await openDB();return promisify(_tx('chatHistory','readwrite').add({date:new Date().toISOString().slice(0,10),time:new Date().toTimeString().slice(0,5),role,text}));}
+async function ls_getSetting(k){await openDB();return promisify(_tx('settings').get(k));}
+async function ls_setSetting(k,v){await openDB();return promisify(_tx('settings','readwrite').put(v,k));}
+
+// ═══ MACRO ENGINE ═══
+function computeTodayTotals(log,goals){const t=log.reduce((a,e)=>({kcal:a.kcal+(e.kcal||0),protein_g:a.protein_g+(e.protein_g||0),carbs_g:a.carbs_g+(e.carbs_g||0),fat_g:a.fat_g+(e.fat_g||0),fiber_g:a.fiber_g+(e.fiber_g||0)}),{kcal:0,protein_g:0,carbs_g:0,fat_g:0,fiber_g:0});const safe=(n,d)=>d>0?Math.min(100,Math.round((n/d)*100)):0;return{totals:t,pct:{kcal:safe(t.kcal,goals.calGoal||2000),protein:safe(t.protein_g,goals.proteinGoal||120),carbs:safe(t.carbs_g,goals.carbGoal||220),fat:safe(t.fat_g,goals.fatGoal||70),fiber:safe(t.fiber_g,goals.fiberGoal||25)},remaining:{kcal:Math.max(0,(goals.calGoal||2000)-t.kcal)}};}
+function suggestCalories(p){const{age=30,sex='male',primaryGoal='Maintain weight'}=p;let bmr=sex==='female'?655+(9.6*65)+(1.8*165)-(4.7*age):88+(13.4*75)+(5*175)-(5.7*age);const tdee=Math.round(bmr*1.55);if(primaryGoal.toLowerCase().includes('lose'))return tdee-500;if(primaryGoal.toLowerCase().includes('build')||primaryGoal.toLowerCase().includes('muscle'))return tdee+300;return tdee;}
+function suggestMacros(kcal,primaryGoal=''){const g=primaryGoal.toLowerCase();let pp=0.30,cp=0.40,fp=0.30;if(g.includes('build')||g.includes('muscle')){pp=0.35;cp=0.40;fp=0.25;}if(g.includes('lose')){pp=0.35;cp=0.35;fp=0.30;}return{proteinGoal:Math.round((kcal*pp)/4),carbGoal:Math.round((kcal*cp)/4),fatGoal:Math.round((kcal*fp)/9),fiberGoal:25,waterGoal:2};}
+
+// ═══ PARSE RESPONSE ═══
+function parseClaudeResponse(responseText,type){if(type==='coach_question')return{type:'coach',text:responseText.trim()};const c=responseText.replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();try{const m=JSON.parse(c);for(const f of['meal','kcal','protein_g','carbs_g','fat_g'])if(m[f]===undefined)throw new Error('missing '+f);m.kcal=Number(m.kcal)||0;m.protein_g=Number(m.protein_g)||0;m.carbs_g=Number(m.carbs_g)||0;m.fat_g=Number(m.fat_g)||0;m.fiber_g=Number(m.fiber_g)||0;if(m.kcal<20)return{type:'water',amount_l:0.25,note:m.meal};return{type:'meal',meal:m};}catch(_){return{type:'coach',text:responseText.trim()};}}
+
+// ═══ CONTEXT BUILDER ═══
+const SYS_TMPL=`You are Aria, a personal health coach inside the Vita app. Be warm, specific, and brief.\nNever give generic advice — always reference the user's actual data below.\n\n## User Profile\nName: {name} | Age: {age} | Sex: {sex}\nGoal: {primaryGoal}\nDaily targets: {calGoal} kcal | {proteinGoal}g protein | {carbGoal}g carbs | {fatGoal}g fat | {fiberGoal}g fiber | {waterGoal}L water\n\n## Current Time\n{currentTime} on {currentDate} ({dayOfWeek})\n\n## Today's Food Log ({totalKcal} kcal so far)\n{foodLogSummary}\n\n## Today's Calendar Events\n{calendarEvents}\n\n## Hydration\n{waterLoggedL}L of {waterGoal}L consumed today\n\n## Instructions\n- For meal logs: respond ONLY with valid JSON in the format specified.\n- For coach questions: respond in plain text, 2-4 sentences max.\n- Always reference specific numbers from the user's data, never speak in generalities.`;
+const HPK=['flight','board','gate','run','gym','workout','race','marathon','dinner','lunch','interview'];
+function fmtFoodLog(log){if(!log||log.length===0)return'No meals logged yet today.';const lines=log.slice(-18).map(e=>`${e.time||'?'} — ${e.meal} → ${e.kcal} kcal | P:${e.protein_g}g C:${e.carbs_g}g F:${e.fat_g}g`);const t=log.reduce((a,e)=>({kcal:a.kcal+(e.kcal||0),p:a.p+(e.protein_g||0),c:a.c+(e.carbs_g||0),f:a.f+(e.fat_g||0)}),{kcal:0,p:0,c:0,f:0});lines.push(`TOTAL SO FAR: ${t.kcal} kcal | P:${t.p}g C:${t.c}g F:${t.f}g`);return lines.join('\n');}
+function fmtCal(events){if(!events||events.length===0)return'No calendar events.';const r=events.filter(e=>{const t=(e.summary||'').toLowerCase();return HPK.some(k=>t.includes(k))||events.length<4;});if(r.length===0)return'No nutritionally relevant events today.';return r.slice(0,5).map(e=>{const t=e.summary||'Untitled';const s=e.start?.dateTime?new Date(e.start.dateTime):null;const ts=s?s.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}):'??:??';const h=HPK.some(k=>t.toLowerCase().includes(k));return`${ts} — ${t}${h?' — PRIORITY':''}`;}).join('\n');}
+async function buildContext(){const profile=await ls_getProfile();const todayLog=await ls_getTodayLog();const waterL=await ls_getTodayWater();let events=[];try{events=await cal_getTodayEvents();}catch(_){}const totalKcal=todayLog.reduce((s,e)=>s+(e.kcal||0),0);const now=new Date();const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];const sp=SYS_TMPL.replace('{name}',profile.name||'Friend').replace('{age}',profile.age||'?').replace('{sex}',profile.sex||'not specified').replace('{primaryGoal}',profile.primaryGoal||'Maintain weight').replace('{calGoal}',profile.calGoal||2000).replace('{proteinGoal}',profile.proteinGoal||120).replace('{carbGoal}',profile.carbGoal||220).replace('{fatGoal}',profile.fatGoal||70).replace('{fiberGoal}',profile.fiberGoal||25).replace(/{waterGoal}/g,profile.waterGoal||2).replace('{currentTime}',now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})).replace('{currentDate}',now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})).replace('{dayOfWeek}',days[now.getDay()]).replace('{totalKcal}',totalKcal).replace('{foodLogSummary}',fmtFoodLog(todayLog)).replace('{calendarEvents}',fmtCal(events)).replace('{waterLoggedL}',waterL.toFixed(1));return{systemPrompt:sp,todayLog,profile};}
+
+// ═══ CALENDAR CLIENT ═══
+let _tokenClient=null;
+function cal_getClientId(){return window._vitaConfig?.googleClientId||'';}
+function cal_getToken(){return sessionStorage.getItem('gCalToken');}
+function cal_isConnected(){return!!cal_getToken();}
+function cal_init(){if(!cal_getClientId()||cal_getClientId()==='__GOOGLE_CLIENT_ID__')return;if(typeof google==='undefined')return;_tokenClient=google.accounts.oauth2.initTokenClient({client_id:cal_getClientId(),scope:'https://www.googleapis.com/auth/calendar.readonly',callback:(r)=>{if(r.access_token){sessionStorage.setItem('gCalToken',r.access_token);document.getElementById('cal-toggle')?.classList.add('on');cal_fetchAndShow();}}});if(cal_getToken()){document.getElementById('cal-toggle')?.classList.add('on');cal_fetchAndShow();}}
+function cal_connect(){if(!_tokenClient){alert('Google Calendar requires a Google Client ID.');return;}_tokenClient.requestAccessToken();}
+function cal_toggleConnection(){if(cal_isConnected()){sessionStorage.removeItem('gCalToken');document.getElementById('cal-toggle')?.classList.remove('on');}else cal_connect();}
+function cal_reconnect(){sessionStorage.removeItem('gCalToken');cal_connect();}
+async function cal_fetchAndShow(){const e=await cal_getTodayEvents();if(e.length>0)cal_renderEvents(e);}
+async function cal_getTodayEvents(){const token=cal_getToken();if(!token)return[];const now=new Date();const start=new Date(now);start.setHours(0,0,0,0);const end=new Date(now);end.setHours(23,59,59,999);const url=`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${start.toISOString()}&timeMax=${end.toISOString()}&singleEvents=true&orderBy=startTime&maxResults=10`;try{const res=await fetch(url,{headers:{Authorization:`Bearer ${token}`}});if(res.status===401){sessionStorage.removeItem('gCalToken');document.getElementById('cal-toggle')?.classList.remove('on');ui_showToast('Calendar session expired — reconnect in Profile','error');return[];}const data=await res.json();return data.items||[];}catch(e){return[];}}
+function cal_renderEvents(events){const HIGH=['flight','board','gate','run','gym','workout','dinner','lunch','interview','race'];const rel=events.slice(0,4);if(rel.length===0)return;const strip=document.getElementById('cal-strip');const list=document.getElementById('cal-events-list');const hdr=document.getElementById('cal-section-header');if(!strip||!list)return;strip.style.display='block';if(hdr)hdr.style.display='flex';list.innerHTML=rel.map(e=>{const t=e.summary||'Event';const s=e.start?.dateTime?new Date(e.start.dateTime):null;const ts=s?s.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true}):'';const h=HIGH.some(k=>t.toLowerCase().includes(k));return`<div class="cal-event"><div class="cal-time">${ts}</div><div class="cal-line" style="background:${h?'var(--warn)':'var(--accent)'}"></div><div class="cal-info"><div class="cal-name">${t}</div><span class="cal-tag ${h?'warn':'neutral'}">${h?'Plan ahead':'On schedule'}</span></div></div>`;}).join('');}
+
+// ═══ VOICE INPUT ═══
+let _recognition=null,_voiceOnResult=null,_voiceOnError=null;
+function voice_init(onR,onE){_voiceOnResult=onR;_voiceOnError=onE;}
+function voice_isSupported(){return!!(window.SpeechRecognition||window.webkitSpeechRecognition);}
+function voice_start(){if(!voice_isSupported()){_voiceOnError?.('Voice input not available. Please type instead.');return;}const SR=window.SpeechRecognition||window.webkitSpeechRecognition;_recognition=new SR();_recognition.continuous=false;_recognition.interimResults=true;_recognition.lang='en-US';_recognition.maxAlternatives=1;let final='';_recognition.onstart=()=>{document.getElementById('transcript-text').textContent='Listening… say what you ate';document.getElementById('listening-overlay').classList.add('active');};_recognition.onresult=(event)=>{let interim='';for(let i=event.resultIndex;i<event.results.length;i++){const t=event.results[i][0].transcript;if(event.results[i].isFinal)final+=t;else interim=t;}const el=document.getElementById('transcript-text');if(el)el.textContent=(final+interim)||'Listening…';};_recognition.onend=()=>{document.getElementById('listening-overlay').classList.remove('active');if(final.trim())_voiceOnResult?.(final.trim());};_recognition.onerror=(event)=>{document.getElementById('listening-overlay').classList.remove('active');if(event.error==='no-speech')return;if(event.error==='not-allowed')_voiceOnError?.('Microphone permission denied. Please allow in Settings.');else _voiceOnError?.('Voice error: '+event.error);};try{_recognition.start();}catch(e){_voiceOnError?.('Could not start voice: '+e.message);}}
+function voice_stop(){_recognition?.stop();document.getElementById('listening-overlay')?.classList.remove('active');}
+
+// ═══ PHOTO INPUT ═══
+let _stream=null,_capturedB64=null,_photoOnCapture=null;
+function photo_init(cb){_photoOnCapture=cb;}
+async function photo_start(){const ov=document.getElementById('camera-overlay'),vid=document.getElementById('camera-video'),prev=document.getElementById('camera-preview'),sBtn=document.getElementById('shutter-btn'),rBtn=document.getElementById('retake-btn'),conf=document.getElementById('photo-confirm');prev.style.display='none';vid.style.display='block';sBtn.style.display='flex';rBtn.style.display='none';conf.style.display='none';_capturedB64=null;try{_stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280}}});vid.srcObject=_stream;ov.classList.add('active');}catch(e){if(e.name==='NotAllowedError')alert('Camera permission denied. Please allow in Settings.');else alert('Camera not available. Please type what you ate instead.');}}
+function photo_capture(){const vid=document.getElementById('camera-video'),canvas=document.getElementById('camera-canvas'),prev=document.getElementById('camera-preview');canvas.width=vid.videoWidth;canvas.height=vid.videoHeight;canvas.getContext('2d').drawImage(vid,0,0);const url=canvas.toDataURL('image/jpeg',0.85);_capturedB64=url.split(',')[1];prev.src=url;prev.style.display='block';vid.style.display='none';document.getElementById('shutter-btn').style.display='none';document.getElementById('retake-btn').style.display='block';document.getElementById('photo-confirm').style.display='block';photo_stopStream();}
+function photo_retake(){_capturedB64=null;photo_start();}
+function photo_confirm(){if(!_capturedB64)return;document.getElementById('camera-overlay').classList.remove('active');_photoOnCapture?.(_capturedB64,'image/jpeg');}
+function photo_cancel(){photo_stopStream();_capturedB64=null;document.getElementById('camera-overlay').classList.remove('active');}
+function photo_stopStream(){if(_stream){_stream.getTracks().forEach(t=>t.stop());_stream=null;}}
+
+// ═══ NOTIFICATIONS ═══
+let _swReg=null;
+async function notif_init(reg){_swReg=reg;const g=await ls_getSetting('notifications');if(g){document.getElementById('notif-toggle')?.classList.add('on');notif_startPolling();}}
+async function notif_toggle(){const c=await ls_getSetting('notifications');if(c){await ls_setSetting('notifications',false);document.getElementById('notif-toggle')?.classList.remove('on');}else await notif_requestPermission();}
+async function notif_requestPermission(){const p=await Notification.requestPermission();if(p==='granted'){await ls_setSetting('notifications',true);document.getElementById('notif-toggle')?.classList.add('on');notif_startPolling();notif_show('Vita',"You're all set! I'll remind you when it matters.");}}
+function notif_startPolling(){setInterval(notif_checkTriggers,15*60*1000);notif_checkTriggers();}
+async function notif_checkTriggers(){if(Notification.permission!=='granted')return;const last=(await ls_getSetting('lastNotifAt'))||0;if(Date.now()-last<2*60*60*1000)return;const profile=await ls_getProfile();const log=await ls_getTodayLog();const waterL=await ls_getTodayWater();const totalKcal=log.reduce((s,e)=>s+(e.kcal||0),0);const h=new Date().getHours(),m=new Date().getMinutes(),now=h*60+m;let trigger=null;if(now>=12*60+30&&totalKcal<200)trigger={body:`You've only had ${totalKcal} kcal — quick lunch window!`};else if(now>=19*60&&totalKcal<(profile.calGoal||2000)*0.5){const r=(profile.calGoal||2000)-totalKcal;trigger={body:`Evening: ${totalKcal} kcal so far, ${r} remaining.`};}else if(now>=15*60&&waterL<1)trigger={body:`Hydration: only ${waterL.toFixed(1)}L today.`};if(trigger){notif_show('Vita',trigger.body);await ls_setSetting('lastNotifAt',Date.now());}}
+function notif_show(title,body){if(_swReg&&Notification.permission==='granted')_swReg.showNotification(title,{body,icon:'/icons/vita-192.png',tag:'vita-health',renotify:true,data:{url:'/?action=coach'}});else if(Notification.permission==='granted')new Notification(title,{body});}
+
+// ═══ CLAUDE CLIENT ═══
+const CLAUDE_API='https://api.anthropic.com/v1/messages',CLAUDE_MODEL='claude-sonnet-4-6';
+const FOOD_KW=['ate','had','drank','drink','eat','breakfast','lunch','dinner','snack','coffee','protein','bar','shake','pizza','salad','burger','sandwich','bowl','soup','rice','pasta','chicken','beef','fish','egg','yogurt','banana','apple','toast','cereal','milk','juice','water','soda','beer','wine','cookie','cake','chips','nuts','bread','cheese','latte','smoothie','wrap'];
+function getKey(){return window._vitaConfig?.anthropicKey||localStorage.getItem('vita_api_key')||'';}
+function classifyInput(text){return FOOD_KW.some(k=>text.toLowerCase().includes(k))?'meal_text':'coach_question';}
+function mealPrompt(text){return`Log this meal: ${text}\n\nRespond ONLY with this JSON, no other text:\n{"meal":"[name]","time":"${new Date().toTimeString().slice(0,5)}","kcal":[number],"protein_g":[number],"carbs_g":[number],"fat_g":[number],"fiber_g":[number],"coaching_note":"[1 sentence]"}`;}
+function photoPrompt(){return`Identify what's in this photo and log it as a meal.\nRespond ONLY with this JSON:\n{"meal":"[name]","time":"${new Date().toTimeString().slice(0,5)}","kcal":[number],"protein_g":[number],"carbs_g":[number],"fat_g":[number],"fiber_g":[number],"coaching_note":"[1 sentence]"}`;}
+async function callClaude(sys,content){const key=getKey();if(!key||key==='__ANTHROPIC_KEY__')throw new Error('API key not set. Go to Profile → API Setup.');const body={model:CLAUDE_MODEL,max_tokens:1000,system:sys,messages:[{role:'user',content}]};const res=await fetch(CLAUDE_API,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-calls':'true'},body:JSON.stringify(body)});if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err.error?.message||`API error ${res.status}`);}const data=await res.json();return data.content?.[0]?.text||'';}
+async function claude_logMeal(text){const{systemPrompt}=await buildContext();const type=classifyInput(text);const msg=type==='meal_text'?mealPrompt(text):text;return parseClaudeResponse(await callClaude(systemPrompt,msg),type);}
+async function claude_logPhoto(b64,mime='image/jpeg'){const{systemPrompt}=await buildContext();const content=[{type:'image',source:{type:'base64',media_type:mime,data:b64}},{type:'text',text:photoPrompt()}];return parseClaudeResponse(await callClaude(systemPrompt,content),'meal_photo');}
+async function claude_askCoach(q){const{systemPrompt}=await buildContext();return parseClaudeResponse(await callClaude(systemPrompt,q),'coach_question');}
+async function claude_getWelcomeMessage(profile){const{systemPrompt}=await buildContext();const h=new Date().getHours();const g=h<12?'morning':h<17?'afternoon':'evening';const q=`Good ${g} message for ${profile.name}. Reference their goal (${profile.primaryGoal}). Be warm and personal. 2-3 sentences max.`;return(await callClaude(systemPrompt,q)).trim();}
+
+// ═══ UI ═══
+function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function setT(id,v){const e=document.getElementById(id);if(e)e.textContent=v;}
+function setW(id,p){const e=document.getElementById(id);if(e)e.style.width=p+'%';}
+function ui_updateStatusTime(){const t=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});document.querySelectorAll('.status-time').forEach(e=>e.textContent=t);}
+function ui_updateDashboard(profile,log,waterL){const{totals,pct}=computeTodayTotals(log,profile);const now=new Date();const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];setT('home-date',`${days[now.getDay()]} · ${months[now.getMonth()]} ${now.getDate()}`);setT('home-name',profile.name||'there');const ring=document.getElementById('cal-ring-fill');if(ring)ring.style.strokeDashoffset=201-(201*pct.kcal/100);setT('ring-kcal',totals.kcal);setT('ring-goal',`/ ${profile.calGoal||2000}`);setT('macro-protein',`${totals.protein_g} / ${profile.proteinGoal||120}g`);setT('macro-carbs',`${totals.carbs_g} / ${profile.carbGoal||220}g`);setT('macro-fat',`${totals.fat_g} / ${profile.fatGoal||70}g`);setT('macro-water',`${waterL.toFixed(1)} / ${profile.waterGoal||2}L`);setW('bar-protein',pct.protein);setW('bar-carbs',pct.carbs);setW('bar-fat',pct.fat);setW('bar-water',Math.min(100,Math.round((waterL/(profile.waterGoal||2))*100)));ui_renderLogList(log,waterL);}
+const IVOICE=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M19 10a7 7 0 0 1-14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>`;
+const IPHOTO=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--sky)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M3 9a2 2 0 0 1 2-2h.93a2 2 0 0 0 1.66-.89l.82-1.22A2 2 0 0 1 10.07 4h3.86a2 2 0 0 1 1.66.89l.82 1.22A2 2 0 0 0 18.07 7H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
+const IMANUAL=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>`;
+const IWATER=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--sky)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>`;
+function ui_renderLogList(log,waterL){const list=document.getElementById('today-log-list');if(!list)return;const items=[...log];if(waterL>0)items.push({_water:true,time:'—',meal:'Water logged',kcal:0,waterL});if(items.length===0){list.innerHTML='<div class="empty-log">No meals logged yet. Tap Log to add your first meal.</div>';return;}const imap={voice:IVOICE,photo:IPHOTO,manual:IMANUAL,water:IWATER};list.innerHTML=items.slice().reverse().map(e=>{if(e._water)return`<div class="log-item"><div class="log-icon">${IWATER}</div><div class="log-info"><div class="log-name">Water intake today</div><div class="log-meta">${e.waterL.toFixed(2)}L total</div></div><span class="log-badge water">Water</span></div>`;const src=e.source||'manual';return`<div class="log-item"><div class="log-icon">${imap[src]||IMANUAL}</div><div class="log-info"><div class="log-name">${escH(e.meal)}</div><div class="log-meta">${e.time||''}</div></div><div class="log-cal">${e.kcal} kcal</div><span class="log-badge ${src}">${src}</span><button class="log-delete" onclick="vitaApp.deleteMeal(${e.id})" title="Remove">×</button></div>`;}).join('');}
+function ui_showParsedCard(meal){setT('parsed-food-name',meal.meal);setT('pm-cal',meal.kcal);setT('pm-pro',meal.protein_g+'g');setT('pm-carb',meal.carbs_g+'g');setT('pm-fat',meal.fat_g+'g');setT('parsed-note',meal.coaching_note||'');document.getElementById('parsed-card').classList.add('active');document.getElementById('processing-card').style.display='none';}
+function ui_showProcessing(text){document.getElementById('processing-card').style.display='flex';document.getElementById('processing-text').textContent=text||'Analyzing…';document.getElementById('parsed-card').classList.remove('active');}
+function ui_hideProcessing(){document.getElementById('processing-card').style.display='none';}
+function ui_hideParsedCard(){document.getElementById('parsed-card').classList.remove('active');}
+function ui_addChatMessage(role,text,isTyping){const c=document.getElementById('chat-messages');if(!c)return;const div=document.createElement('div');div.className=`msg ${role}${isTyping?' coach-typing':''}`;const now=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true});if(isTyping){div.id='typing-indicator';div.innerHTML=`<div class="msg-bubble"><div class="proc-dot"></div><div class="proc-dot"></div><div class="proc-dot"></div></div>`;}else{div.innerHTML=`<div class="msg-bubble">${escH(text)}</div><div class="msg-time">${now}</div>`;}c.appendChild(div);c.scrollTop=c.scrollHeight;return div;}
+function ui_removeTypingIndicator(){document.getElementById('typing-indicator')?.remove();}
+function ui_showToast(msg,type){const phone=document.querySelector('.phone');phone.querySelector('.toast')?.remove();const t=document.createElement('div');t.className=`toast${type?' '+type:''}`;t.textContent=msg;phone.appendChild(t);setTimeout(()=>t.remove(),3500);}
+function ui_updateProfileScreen(profile){const name=profile.name||'You';const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);setT('profile-initials',ini);setT('profile-name-display',name);setT('profile-goal-display',profile.primaryGoal||'Goal not set');setT('stat-kcal',profile.calGoal||2000);setT('stat-protein',(profile.proteinGoal||120)+'g');setT('stat-water',(profile.waterGoal||2)+'L');const key=localStorage.getItem('vita_api_key')||window._vitaConfig?.anthropicKey||'';setT('api-key-status',(key&&key!=='__ANTHROPIC_KEY__')?'••••'+key.slice(-4):'Not set');}
+function ui_setNavActive(name){document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));document.querySelectorAll('.bottom-nav').forEach(nav=>{const items=nav.querySelectorAll('.nav-item');['home','log','coach','profile'].forEach((n,i)=>{if(n===name)items[i]?.classList.add('active');});});}
+function ui_renderOnboarding(step,total){const wrap=document.getElementById('ob-wrap');if(!wrap)return;const dots=Array.from({length:total},(_,i)=>`<div class="ob-dot${i===step?' active':''}"></div>`).join('');const screens=[
+`<div class="ob-screen"><div class="ob-progress">${dots}</div><div class="ob-eyebrow">Welcome to Vita</div><div class="ob-title">Meet <em>Aria</em>,<br>your health coach</div><div class="ob-sub">Context-aware AI that knows your schedule, goals, and log — before giving advice.</div><div class="ob-fields"><div><div class="field-label">Your name</div><input class="field-input" id="ob-name" type="text" placeholder="What should Aria call you?" autocomplete="off"></div><div><div class="field-label">Anthropic API Key <span style="font-size:10px;color:var(--text3)">(get yours free at console.anthropic.com)</span></div><input class="field-input" id="ob-apikey" type="password" placeholder="sk-ant-..."></div></div><div class="ob-actions"><button class="btn-primary" onclick="vitaApp.obNext()">Continue →</button></div></div>`,
+`<div class="ob-screen"><div class="ob-progress">${dots}</div><div class="ob-eyebrow">About you</div><div class="ob-title">A little about<br><em>you</em></div><div class="ob-sub">Used to calculate your personalized calorie targets.</div><div class="ob-fields"><div><div class="field-label">Age</div><input class="field-input" id="ob-age" type="number" placeholder="e.g. 28" min="14" max="100"></div><div><div class="field-label">Sex</div><select class="field-input" id="ob-sex"><option value="male">Male</option><option value="female">Female</option><option value="prefer not to say">Prefer not to say</option></select></div></div><div class="ob-actions"><button class="btn-primary" onclick="vitaApp.obNext()">Continue →</button><button class="btn-ghost" onclick="vitaApp.obBack()">← Back</button></div></div>`,
+`<div class="ob-screen"><div class="ob-progress">${dots}</div><div class="ob-eyebrow">Your goal</div><div class="ob-title">What are you<br><em>working toward?</em></div><div class="ob-sub">Aria will coach you specifically toward this.</div><div class="ob-fields"><div class="goal-options"><div class="goal-option" data-goal="Lose weight" onclick="vitaApp.selectGoal(this)"><div class="goal-option-icon">⚡</div><div class="goal-option-label">Lose weight</div></div><div class="goal-option" data-goal="Build muscle" onclick="vitaApp.selectGoal(this)"><div class="goal-option-icon">💪</div><div class="goal-option-label">Build muscle</div></div><div class="goal-option" data-goal="Maintain weight" onclick="vitaApp.selectGoal(this)"><div class="goal-option-icon">🎯</div><div class="goal-option-label">Maintain weight</div></div><div class="goal-option" data-goal="Improve energy" onclick="vitaApp.selectGoal(this)"><div class="goal-option-icon">✨</div><div class="goal-option-label">Improve energy</div></div></div></div><div class="ob-actions"><button class="btn-primary" onclick="vitaApp.obNext()">Continue →</button><button class="btn-ghost" onclick="vitaApp.obBack()">← Back</button></div></div>`,
+`<div class="ob-screen"><div class="ob-progress">${dots}</div><div class="ob-eyebrow">Daily targets</div><div class="ob-title">Your daily<br><em>nutrition goals</em></div><div class="ob-sub">Auto-suggested. Adjust as needed.</div><div class="ob-fields"><div class="targets-grid"><div class="target-row"><div class="target-row-top"><span class="target-name">Calories</span><span class="target-val" id="tgt-kcal-val">2000 kcal</span></div><input type="range" class="target-slider" id="tgt-kcal" min="1200" max="4000" step="50" value="2000" oninput="document.getElementById('tgt-kcal-val').textContent=this.value+' kcal'"></div><div class="target-row"><div class="target-row-top"><span class="target-name">Protein</span><span class="target-val" id="tgt-protein-val">120g</span></div><input type="range" class="target-slider" id="tgt-protein" min="40" max="300" step="5" value="120" oninput="document.getElementById('tgt-protein-val').textContent=this.value+'g'"></div><div class="target-row"><div class="target-row-top"><span class="target-name">Water</span><span class="target-val" id="tgt-water-val">2L</span></div><input type="range" class="target-slider" id="tgt-water" min="1" max="5" step="0.25" value="2" oninput="document.getElementById('tgt-water-val').textContent=this.value+'L'"></div></div></div><div class="ob-actions"><button class="btn-primary" onclick="vitaApp.obNext()">Continue →</button><button class="btn-ghost" onclick="vitaApp.obBack()">← Back</button></div></div>`,
+`<div class="ob-screen"><div class="ob-progress">${dots}</div><div class="ob-eyebrow">You're all set</div><div class="ob-title">Ready to start<br><em>coaching you</em></div><div class="ob-sub">Aria knows your goals and is ready to help.</div><div class="ob-fields"><div class="notif-card"><div class="notif-icon">🔔</div><div class="notif-msg"><strong>Smart notifications</strong><br>Vita can remind you to hit your water goal, eat before a flight, or check in at end of day.</div><button class="btn-primary" onclick="vitaApp.requestNotifications()" style="margin-bottom:0">Allow notifications</button></div></div><div class="ob-actions"><button class="btn-primary" onclick="vitaApp.finishOnboarding()">Start logging →</button><button class="btn-ghost" onclick="vitaApp.obBack()">← Back</button></div></div>`
+];wrap.innerHTML=screens[Math.min(step,screens.length-1)]||screens[0];}
+
+// ═══ APP ═══
+let _currentMeal=null,_obStep=0,_obData={};
+const OB_STEPS=5;
+
+async function appInit(){
+  ui_updateStatusTime();
+  setInterval(ui_updateStatusTime,30000);
+  if('serviceWorker'in navigator){try{const reg=await navigator.serviceWorker.register('/sw.js');await notif_init(reg);}catch(_){}}
+  cal_init();
+  voice_init(async(transcript)=>{showScreen('log');ui_showProcessing('Analyzing with Aria…');try{const r=await claude_logMeal(transcript);await handleClaudeResult(r,'voice');}catch(e){ui_hideProcessing();ui_showToast(e.message||'Could not log — tap to try again','error');}},err=>ui_showToast(err,'error'));
+  photo_init(async(b64,mime)=>{showScreen('log');ui_showProcessing('Aria is reading your meal…');try{const r=await claude_logPhoto(b64,mime);await handleClaudeResult(r,'photo');}catch(e){ui_hideProcessing();ui_showToast('Could not read photo — type it instead','error');}});
+  const params=new URLSearchParams(window.location.search);
+  if(params.get('action')==='listen'){setTimeout(()=>voice_start(),500);history.replaceState({},'','/');}
+  else if(params.get('action')==='photo'){setTimeout(()=>photo_start(),500);history.replaceState({},'','/');}
+  else if(params.get('action')==='coach'){showScreen('coach');}
+  const profile=await ls_getProfile();
+  const onboarded=await ls_getSetting('onboarded');
+  if(!onboarded){const kcal=suggestCalories(profile);_obData={calGoal:kcal,...suggestMacros(kcal)};showScreen('onboarding');ui_renderOnboarding(_obStep,OB_STEPS);}
+  else await enterApp(profile);
+}
+
+async function enterApp(profile){
+  showScreen('home');
+  await refreshDashboard();
+  const hist=await ls_getChatHistory();
+  if(hist.length===0){try{const msg=await claude_getWelcomeMessage(profile);await ls_addChatMessage('coach',msg);ui_addChatMessage('coach',msg);}catch(_){}}
+  else hist.forEach(m=>ui_addChatMessage(m.role,m.text));
+  ui_updateProfileScreen(profile);
+}
+
+async function refreshDashboard(){const p=await ls_getProfile();const log=await ls_getTodayLog();const w=await ls_getTodayWater();ui_updateDashboard(p,log,w);}
+
+async function handleClaudeResult(result,source){
+  if(result.type==='meal'){_currentMeal={...result.meal,source};ui_showParsedCard(result.meal);}
+  else if(result.type==='water'){await ls_addWater(result.amount_l);ui_hideProcessing();ui_showToast(`Water logged — ${result.note||''}`, 'success');await refreshDashboard();}
+  else if(result.type==='coach'){ui_hideProcessing();ui_showToast(result.text.slice(0,120),'');await ls_addChatMessage('coach',result.text);ui_addChatMessage('coach',result.text);}
+}
+
+function showScreen(name){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById('screen-'+name)?.classList.add('active');ui_setNavActive(name);if(name==='home')refreshDashboard();}
+
+window.vitaApp={
+  confirmLog:async function(){if(!_currentMeal)return;try{await ls_addMeal(_currentMeal);ui_hideParsedCard();_currentMeal=null;await refreshDashboard();showScreen('home');ui_showToast('Meal logged!','success');}catch(e){ui_showToast('Could not save — try again','error');}},
+  deleteMeal:async function(id){await ls_deleteMeal(id);await refreshDashboard();},
+  handleTextLog:async function(){const inp=document.getElementById('text-log-input');const text=inp?.value?.trim();if(!text)return;inp.value='';showScreen('log');ui_showProcessing('Analyzing with Aria…');try{const r=await claude_logMeal(text);await handleClaudeResult(r,'manual');}catch(e){ui_hideProcessing();ui_showToast(e.message||'Could not log — check API key in Profile','error');}},
+  quickLog:async function(text){showScreen('log');ui_showProcessing(`Logging ${text}…`);try{const r=await claude_logMeal(text);await handleClaudeResult(r,'manual');}catch(e){ui_hideProcessing();ui_showToast(e.message||'Could not log','error');}},
+  logWater:async function(amount){await ls_addWater(amount);await refreshDashboard();ui_showToast(`${amount*1000}ml water logged`,'success');},
+  sendCoachMessage:async function(text){const inp=document.getElementById('chat-input');const msg=text||inp?.value?.trim();if(!msg)return;if(inp)inp.value='';ui_addChatMessage('user',msg);await ls_addChatMessage('user',msg);ui_addChatMessage('coach','',true);try{const r=await claude_askCoach(msg);ui_removeTypingIndicator();const reply=r.text||r.meal?.coaching_note||'Got it!';ui_addChatMessage('coach',reply);await ls_addChatMessage('coach',reply);}catch(e){ui_removeTypingIndicator();ui_addChatMessage('coach',e.message?.includes('API key')?'Please add your Anthropic API key in Profile → API Setup.':'Aria is unavailable — try again.');}},
+  selectGoal:function(el){document.querySelectorAll('.goal-option').forEach(o=>o.classList.remove('selected'));el.classList.add('selected');_obData.primaryGoal=el.dataset.goal;const kcal=suggestCalories({..._obData});_obData.calGoal=kcal;Object.assign(_obData,suggestMacros(kcal,_obData.primaryGoal));},
+  obNext:function(){
+    if(_obStep===0){const name=document.getElementById('ob-name')?.value?.trim();const key=document.getElementById('ob-apikey')?.value?.trim();if(!name){ui_showToast('Please enter your name','error');return;}_obData.name=name;if(key){localStorage.setItem('vita_api_key',key);window._vitaConfig=window._vitaConfig||{};window._vitaConfig.anthropicKey=key;}}
+    else if(_obStep===1){const age=parseInt(document.getElementById('ob-age')?.value);const sex=document.getElementById('ob-sex')?.value;if(!age||age<14){ui_showToast('Please enter your age','error');return;}_obData.age=age;_obData.sex=sex;const kcal=suggestCalories(_obData);_obData.calGoal=kcal;Object.assign(_obData,suggestMacros(kcal));}
+    else if(_obStep===2){if(!_obData.primaryGoal){ui_showToast('Please select a goal','error');return;}}
+    else if(_obStep===3){_obData.calGoal=parseInt(document.getElementById('tgt-kcal')?.value)||2000;_obData.proteinGoal=parseInt(document.getElementById('tgt-protein')?.value)||120;_obData.waterGoal=parseFloat(document.getElementById('tgt-water')?.value)||2;Object.assign(_obData,suggestMacros(_obData.calGoal,_obData.primaryGoal));_obData.proteinGoal=parseInt(document.getElementById('tgt-protein')?.value)||_obData.proteinGoal;}
+    _obStep=Math.min(_obStep+1,OB_STEPS-1);ui_renderOnboarding(_obStep,OB_STEPS);
+    if(_obStep===3){setTimeout(()=>{const ks=document.getElementById('tgt-kcal');if(ks){ks.value=_obData.calGoal;document.getElementById('tgt-kcal-val').textContent=_obData.calGoal+' kcal';}const ps=document.getElementById('tgt-protein');if(ps){ps.value=_obData.proteinGoal;document.getElementById('tgt-protein-val').textContent=_obData.proteinGoal+'g';}},50);}
+  },
+  obBack:function(){_obStep=Math.max(_obStep-1,0);ui_renderOnboarding(_obStep,OB_STEPS);},
+  requestNotifications:async function(){await notif_requestPermission();},
+  finishOnboarding:async function(){const p={name:_obData.name||'Friend',age:_obData.age||30,sex:_obData.sex||'prefer not to say',primaryGoal:_obData.primaryGoal||'Maintain weight',calGoal:_obData.calGoal||2000,proteinGoal:_obData.proteinGoal||120,carbGoal:_obData.carbGoal||220,fatGoal:_obData.fatGoal||70,fiberGoal:_obData.fiberGoal||25,waterGoal:_obData.waterGoal||2};await ls_saveProfile(p);await ls_setSetting('onboarded',true);await ls_setSetting('firstLogDate',new Date().toISOString().slice(0,10));await enterApp(p);},
+  resetOnboarding:function(){_obStep=0;_obData={};showScreen('onboarding');ui_renderOnboarding(_obStep,OB_STEPS);},
+  showApiKeyEditor:function(){document.getElementById('api-key-modal').style.display='flex';document.getElementById('api-key-input').value=localStorage.getItem('vita_api_key')||'';},
+  saveApiKey:async function(){const key=document.getElementById('api-key-input')?.value?.trim();if(key){localStorage.setItem('vita_api_key',key);window._vitaConfig=window._vitaConfig||{};window._vitaConfig.anthropicKey=key;document.getElementById('api-key-modal').style.display='none';const p=await ls_getProfile().catch(()=>({}));ui_updateProfileScreen(p);ui_showToast('API key saved','success');}},
+  closeModal:function(id){document.getElementById(id).style.display='none';}
+};
+
+window.app={switchScreen:showScreen};
+window.voiceInput={start:voice_start,stop:voice_stop,isSupported:voice_isSupported};
+window.photoInput={start:photo_start,capture:photo_capture,retake:photo_retake,confirm:photo_confirm,cancel:photo_cancel};
+window.calendarClient={init:cal_init,connect:cal_connect,toggleConnection:cal_toggleConnection,reconnect:cal_reconnect,getTodayEvents:cal_getTodayEvents,isConnected:cal_isConnected};
+window.notificationManager={toggle:notif_toggle,requestPermission:notif_requestPermission};
+
+window.addEventListener('online',()=>document.getElementById('offline-banner')?.classList.remove('visible'));
+window.addEventListener('offline',()=>document.getElementById('offline-banner')?.classList.add('visible'));
+
+appInit();
+</script>
+</body>
+</html>
