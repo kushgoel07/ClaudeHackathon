@@ -23,8 +23,8 @@ const server = http.createServer((req, res) => {
     try {
       let html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
       html = html
-        .replace('__ANTHROPIC_KEY__', process.env.ANTHROPIC_API_KEY || '')
-        .replace('__GOOGLE_CLIENT_ID__', process.env.GOOGLE_CLIENT_ID || '');
+        .replace(/__ANTHROPIC_KEY__/g, process.env.ANTHROPIC_API_KEY || '')
+        .replace(/__GOOGLE_CLIENT_ID__/g, process.env.GOOGLE_CLIENT_ID || '');
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(html);
     } catch (e) {

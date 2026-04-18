@@ -1,4 +1,4 @@
-const CACHE = 'vita-v3';
+const CACHE = 'vita-v4';
 const ASSETS = ['/', '/index.html', '/styles/app.css'];
 
 self.addEventListener('install', (e) => {
@@ -18,11 +18,21 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
+  // Never cache API calls
   if (e.request.url.includes('api.anthropic.com') ||
       e.request.url.includes('googleapis.com') ||
       e.request.url.includes('accounts.google.com')) return;
+
+  // Network-first strategy: try network, fall back to cache (avoids stale content)
   e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request))
+    fetch(e.request)
+      .then(response => {
+        // Clone the response and update cache with fresh version
+        const clone = response.clone();
+        caches.open(CACHE).then(cache => cache.put(e.request, clone));
+        return response;
+      })
+      .catch(() => caches.match(e.request))
   );
 });
 
