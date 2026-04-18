@@ -1,9 +1,5 @@
-const CACHE = 'vita-v1';
-const ASSETS = ['/', '/index.html', '/styles/app.css', '/src/app.js',
-  '/src/logStore.js', '/src/macroEngine.js', '/src/contextBuilder.js',
-  '/src/claudeClient.js', '/src/parseClaudeResponse.js', '/src/voiceInput.js',
-  '/src/photoInput.js', '/src/calendarClient.js', '/src/notificationManager.js',
-  '/src/ui.js'];
+const CACHE = 'vita-v3';
+const ASSETS = ['/', '/index.html', '/styles/app.css'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
