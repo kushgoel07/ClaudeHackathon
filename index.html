@@ -540,7 +540,7 @@ async function claude_logPhoto(b64, mime = 'image/jpeg') {
     { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
     { type: 'text', text: photoPrompt() }
   ];
-  const responseText = await callClaude(systemPrompt, content);
+  const responseText = await callClaude(systemPrompt, [{ role: 'user', content }]);
   return parseClaudeResponse(responseText, 'meal_photo');
 }
 
