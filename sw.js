@@ -1,5 +1,5 @@
-const CACHE = 'vita-v3';
-const ASSETS = ['/', '/index.html', '/styles/app.css'];
+const CACHE = 'vita-v4';
+const ASSETS = ['/styles/app.css'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -18,9 +18,27 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  if (e.request.url.includes('api.anthropic.com') ||
-      e.request.url.includes('googleapis.com') ||
-      e.request.url.includes('accounts.google.com')) return;
+  const url = new URL(e.request.url);
+
+  if (url.pathname.startsWith('/api/') ||
+      url.hostname.includes('api.anthropic.com') ||
+      url.hostname.includes('googleapis.com') ||
+      url.hostname.includes('accounts.google.com')) {
+    return;
+  }
+
+  if (e.request.mode === 'navigate' ||
+      e.request.destination === 'document' ||
+      url.pathname === '/' ||
+      url.pathname === '/index.html') {
+    e.respondWith(
+      fetch(e.request).catch(() =>
+        caches.match(e.request).then(c => c || new Response('Offline', { status: 503 }))
+      )
+    );
+    return;
+  }
+
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request))
   );

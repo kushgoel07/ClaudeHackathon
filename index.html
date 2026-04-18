@@ -18,11 +18,11 @@
 <script>
   const _key = '__ANTHROPIC_KEY__';
   const _gid = '__GOOGLE_CLIENT_ID__';
-  if (_key && _key !== '__ANTHROPIC_KEY__' && !localStorage.getItem('vita_api_key')) {
+  if (_key && _key !== '__ANTHROPIC_KEY__') {
     localStorage.setItem('vita_api_key', _key);
   }
   window._vitaConfig = {
-    anthropicKey: localStorage.getItem('vita_api_key') || _key,
+    anthropicKey: (_key !== '__ANTHROPIC_KEY__' ? _key : null) || localStorage.getItem('vita_api_key') || _key,
     googleClientId: _gid !== '__GOOGLE_CLIENT_ID__' ? _gid : ''
   };
 </script>
@@ -426,7 +426,28 @@ function suggestCalories(p){const{age=30,sex='male',primaryGoal='Maintain weight
 function suggestMacros(kcal,primaryGoal=''){const g=primaryGoal.toLowerCase();let pp=0.30,cp=0.40,fp=0.30;if(g.includes('build')||g.includes('muscle')){pp=0.35;cp=0.40;fp=0.25;}if(g.includes('lose')){pp=0.35;cp=0.35;fp=0.30;}return{proteinGoal:Math.round((kcal*pp)/4),carbGoal:Math.round((kcal*cp)/4),fatGoal:Math.round((kcal*fp)/9),fiberGoal:25,waterGoal:2};}
 
 // ═══ PARSE RESPONSE ═══
-function parseClaudeResponse(responseText,type){if(type==='coach_question')return{type:'coach',text:responseText.trim()};const c=responseText.replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();try{const m=JSON.parse(c);for(const f of['meal','kcal','protein_g','carbs_g','fat_g'])if(m[f]===undefined)throw new Error('missing '+f);m.kcal=Number(m.kcal)||0;m.protein_g=Number(m.protein_g)||0;m.carbs_g=Number(m.carbs_g)||0;m.fat_g=Number(m.fat_g)||0;m.fiber_g=Number(m.fiber_g)||0;if(m.kcal<20)return{type:'water',amount_l:0.25,note:m.meal};return{type:'meal',meal:m};}catch(_){return{type:'coach',text:responseText.trim()};}}
+function parseClaudeResponse(responseText, type) {
+  const text = (responseText || '').trim();
+  if (!text) throw new Error('Empty response from Aria');
+  if (type === 'coach_question') return { type: 'coach', text };
+
+  const cleaned = text.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
+  try {
+    const meal = JSON.parse(cleaned);
+    for (const f of ['meal', 'kcal', 'protein_g', 'carbs_g', 'fat_g']) {
+      if (meal[f] === undefined) throw new Error('missing ' + f);
+    }
+    meal.kcal = Number(meal.kcal) || 0;
+    meal.protein_g = Number(meal.protein_g) || 0;
+    meal.carbs_g = Number(meal.carbs_g) || 0;
+    meal.fat_g = Number(meal.fat_g) || 0;
+    meal.fiber_g = Number(meal.fiber_g) || 0;
+    if (meal.kcal < 20) return { type: 'water', amount_l: 0.25, note: meal.meal };
+    return { type: 'meal', meal };
+  } catch (_) {
+    return { type: 'coach', text };
+  }
+}
 
 // ═══ CONTEXT BUILDER ═══
 const SYS_TMPL=`You are Aria, a personal health coach inside the Vita app. Be warm, specific, and brief.\nNever give generic advice — always reference the user's actual data below.\n\n## User Profile\nName: {name} | Age: {age} | Sex: {sex}\nGoal: {primaryGoal}\nDaily targets: {calGoal} kcal | {proteinGoal}g protein | {carbGoal}g carbs | {fatGoal}g fat | {fiberGoal}g fiber | {waterGoal}L water\n\n## Current Time\n{currentTime} on {currentDate} ({dayOfWeek})\n\n## Today's Food Log ({totalKcal} kcal so far)\n{foodLogSummary}\n\n## Today's Calendar Events\n{calendarEvents}\n\n## Hydration\n{waterLoggedL}L of {waterGoal}L consumed today\n\n## Instructions\n- For meal logs: respond ONLY with valid JSON in the format specified.\n- For coach questions: respond in plain text, 2-4 sentences max.\n- Always reference specific numbers from the user's data, never speak in generalities.`;
@@ -475,17 +496,178 @@ async function notif_checkTriggers(){if(Notification.permission!=='granted')retu
 function notif_show(title,body){if(_swReg&&Notification.permission==='granted')_swReg.showNotification(title,{body,icon:'/icons/vita-192.png',tag:'vita-health',renotify:true,data:{url:'/?action=coach'}});else if(Notification.permission==='granted')new Notification(title,{body});}
 
 // ═══ CLAUDE CLIENT ═══
-const CLAUDE_API='https://api.anthropic.com/v1/messages',CLAUDE_MODEL='claude-sonnet-4-6';
-const FOOD_KW=['ate','had','drank','drink','eat','breakfast','lunch','dinner','snack','coffee','protein','bar','shake','pizza','salad','burger','sandwich','bowl','soup','rice','pasta','chicken','beef','fish','egg','yogurt','banana','apple','toast','cereal','milk','juice','water','soda','beer','wine','cookie','cake','chips','nuts','bread','cheese','latte','smoothie','wrap'];
-function getKey(){return window._vitaConfig?.anthropicKey||localStorage.getItem('vita_api_key')||'';}
-function classifyInput(text){return FOOD_KW.some(k=>text.toLowerCase().includes(k))?'meal_text':'coach_question';}
-function mealPrompt(text){return`Log this meal: ${text}\n\nRespond ONLY with this JSON, no other text:\n{"meal":"[name]","time":"${new Date().toTimeString().slice(0,5)}","kcal":[number],"protein_g":[number],"carbs_g":[number],"fat_g":[number],"fiber_g":[number],"coaching_note":"[1 sentence]"}`;}
-function photoPrompt(){return`Identify what's in this photo and log it as a meal.\nRespond ONLY with this JSON:\n{"meal":"[name]","time":"${new Date().toTimeString().slice(0,5)}","kcal":[number],"protein_g":[number],"carbs_g":[number],"fat_g":[number],"fiber_g":[number],"coaching_note":"[1 sentence]"}`;}
-async function callClaude(sys,content){const key=getKey();if(!key||key==='__ANTHROPIC_KEY__')throw new Error('API key not set. Go to Profile → API Setup.');const body={model:CLAUDE_MODEL,max_tokens:1000,system:sys,messages:[{role:'user',content}]};const res=await fetch(CLAUDE_API,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-calls':'true'},body:JSON.stringify(body)});if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err.error?.message||`API error ${res.status}`);}const data=await res.json();return data.content?.[0]?.text||'';}
-async function claude_logMeal(text){const{systemPrompt}=await buildContext();const type=classifyInput(text);const msg=type==='meal_text'?mealPrompt(text):text;return parseClaudeResponse(await callClaude(systemPrompt,msg),type);}
-async function claude_logPhoto(b64,mime='image/jpeg'){const{systemPrompt}=await buildContext();const content=[{type:'image',source:{type:'base64',media_type:mime,data:b64}},{type:'text',text:photoPrompt()}];return parseClaudeResponse(await callClaude(systemPrompt,content),'meal_photo');}
-async function claude_askCoach(q){const{systemPrompt}=await buildContext();return parseClaudeResponse(await callClaude(systemPrompt,q),'coach_question');}
-async function claude_getWelcomeMessage(profile){const{systemPrompt}=await buildContext();const h=new Date().getHours();const g=h<12?'morning':h<17?'afternoon':'evening';const q=`Good ${g} message for ${profile.name}. Reference their goal (${profile.primaryGoal}). Be warm and personal. 2-3 sentences max.`;return(await callClaude(systemPrompt,q)).trim();}
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
+const FOOD_KW = ['ate','had','drank','drink','eat','breakfast','lunch','dinner','snack','coffee','protein','bar','shake','pizza','salad','burger','sandwich','bowl','soup','rice','pasta','chicken','beef','fish','egg','yogurt','banana','apple','toast','cereal','milk','juice','water','soda','beer','wine','cookie','cake','chips','nuts','bread','cheese','latte','smoothie','wrap'];
+
+function classifyInput(text) {
+  return FOOD_KW.some(k => text.toLowerCase().includes(k)) ? 'meal_text' : 'coach_question';
+}
+
+function mealPrompt(text) {
+  return `Log this meal: ${text}\n\nRespond ONLY with this JSON, no other text:\n{"meal":"[name]","time":"${new Date().toTimeString().slice(0,5)}","kcal":[number],"protein_g":[number],"carbs_g":[number],"fat_g":[number],"fiber_g":[number],"coaching_note":"[1 sentence]"}`;
+}
+
+function photoPrompt() {
+  return `Identify what's in this photo and log it as a meal.\nRespond ONLY with this JSON:\n{"meal":"[name]","time":"${new Date().toTimeString().slice(0,5)}","kcal":[number],"protein_g":[number],"carbs_g":[number],"fat_g":[number],"fiber_g":[number],"coaching_note":"[1 sentence]"}`;
+}
+
+async function callClaude(systemPrompt, messagesOrContent) {
+  const messages = Array.isArray(messagesOrContent)
+    ? messagesOrContent
+    : [{ role: 'user', content: messagesOrContent }];
+
+  const body = {
+    model: CLAUDE_MODEL,
+    max_tokens: 1000,
+    system: systemPrompt,
+    messages
+  };
+
+  let res;
+  try {
+    res = await fetch('/api/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  } catch (networkErr) {
+    throw new Error('Cannot reach server — is it running? (' + networkErr.message + ')');
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const msg = err.error?.message || `API error ${res.status}`;
+    throw new Error(msg);
+  }
+
+  const data = await res.json();
+  const text = data.content?.[0]?.text;
+  if (!text) throw new Error('Aria returned an empty response');
+  return text;
+}
+
+async function claude_logMeal(text) {
+  const { systemPrompt } = await buildContext();
+  const type = classifyInput(text);
+  const userMsg = type === 'meal_text' ? mealPrompt(text) : text;
+  const responseText = await callClaude(systemPrompt, userMsg);
+  return parseClaudeResponse(responseText, type);
+}
+
+async function claude_logPhoto(b64, mime = 'image/jpeg') {
+  const { systemPrompt } = await buildContext();
+  const content = [
+    { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
+    { type: 'text', text: photoPrompt() }
+  ];
+  const responseText = await callClaude(systemPrompt, content);
+  return parseClaudeResponse(responseText, 'meal_photo');
+}
+
+const CHAT_DIRECTIVE = [
+  'You are in CHAT MODE. This is a strict constraint that overrides every other instruction in the system prompt.',
+  'Every response MUST be plain conversational English — 2 to 4 sentences, nothing more.',
+  'ABSOLUTELY FORBIDDEN in chat replies: JSON, curly braces { }, square brackets [ ] for data, code fences (```), markdown tables, or bullet lists. Do not output any structured data of any kind, even inside or after a sentence.',
+  'If the user asks you to log a meal, log water, or record anything in chat, DO NOT produce a meal-log JSON. Instead, reply in one or two sentences telling them to tap the Log button (voice, photo, or text) to record it properly. Example: "Happy to help log that — tap the Log button and say or type it in, and I\'ll capture the macros for you."',
+  'Speak naturally, as a friendly coach would in a text message. Use the prior conversation turns above as context — reference things the user has already said when relevant.'
+].join(' ');
+
+const CHAT_HISTORY_LIMIT = 20;
+
+function stripStructuredBlocks(text) {
+  let out = text.replace(/```[\s\S]*?```/g, ' ');
+  out = stripBalanced(out, '{', '}');
+  out = stripBalanced(out, '[', ']');
+  return out;
+}
+
+function stripBalanced(text, open, close) {
+  let result = '';
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === open) {
+      let depth = 0, j = i, inStr = false, esc = false, ended = false;
+      for (; j < text.length; j++) {
+        const c = text[j];
+        if (inStr) {
+          if (esc) esc = false;
+          else if (c === '\\') esc = true;
+          else if (c === '"') inStr = false;
+        } else {
+          if (c === '"') inStr = true;
+          else if (c === open) depth++;
+          else if (c === close) { depth--; if (depth === 0) { j++; ended = true; break; } }
+        }
+      }
+      if (ended) { result += ' '; i = j; continue; }
+    }
+    result += ch;
+    i++;
+  }
+  return result;
+}
+
+function humanizeResponse(text) {
+  const original = (text || '').trim();
+  if (!original) return original;
+
+  let cleaned = stripStructuredBlocks(original);
+  cleaned = cleaned.replace(/\s{2,}/g, ' ').replace(/\s+([.,!?;:])/g, '$1').trim();
+  cleaned = cleaned.replace(/^[\s,;:.\-]+|[\s,;:\-]+$/g, '').trim();
+
+  const hadStructured = cleaned.length !== original.length;
+  const meaningful = cleaned.replace(/[^A-Za-z]/g, '');
+
+  if (meaningful.length < 8) {
+    return "I had trouble phrasing that naturally — could you rephrase your question? If you wanted to log a meal, tap the Log button and I'll capture it from there.";
+  }
+
+  if (hadStructured && /\b(log(ging|ged)?|calor|protein|carbs?|fat|macro)\b/i.test(original)) {
+    return cleaned + " To record that properly, tap the Log button and say or type what you ate — I'll handle the macros there.";
+  }
+
+  return cleaned;
+}
+
+async function buildChatMessages(currentQuestion) {
+  const history = await ls_getChatHistory();
+  const mapped = history.map(m => ({
+    role: m.role === 'coach' ? 'assistant' : 'user',
+    content: m.text
+  }));
+
+  const firstUserIdx = mapped.findIndex(m => m.role === 'user');
+  let messages = firstUserIdx >= 0 ? mapped.slice(firstUserIdx) : [];
+
+  messages = messages.slice(-CHAT_HISTORY_LIMIT);
+
+  const last = messages[messages.length - 1];
+  const currentAlreadyPresent = last && last.role === 'user' && last.content === currentQuestion;
+  if (!currentAlreadyPresent) {
+    messages.push({ role: 'user', content: currentQuestion });
+  }
+
+  return messages;
+}
+
+async function claude_askCoach(question) {
+  const { systemPrompt } = await buildContext();
+  const chatSystemPrompt = `${systemPrompt}\n\n## Chat Mode Instructions\n${CHAT_DIRECTIVE}`;
+  const messages = await buildChatMessages(question);
+  const responseText = await callClaude(chatSystemPrompt, messages);
+  return { type: 'coach', text: humanizeResponse(responseText) };
+}
+
+async function claude_getWelcomeMessage(profile) {
+  const { systemPrompt } = await buildContext();
+  const chatSystemPrompt = `${systemPrompt}\n\n## Chat Mode Instructions\n${CHAT_DIRECTIVE}`;
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+  const question = `Write a warm good ${greeting} greeting for ${profile.name}. Reference their goal (${profile.primaryGoal}). 2-3 sentences max.`;
+  const responseText = await callClaude(chatSystemPrompt, question);
+  return humanizeResponse(responseText);
+}
 
 // ═══ UI ═══
 function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -536,12 +718,24 @@ async function appInit(){
   else await enterApp(profile);
 }
 
-async function enterApp(profile){
+async function enterApp(profile) {
   showScreen('home');
   await refreshDashboard();
-  const hist=await ls_getChatHistory();
-  if(hist.length===0){try{const msg=await claude_getWelcomeMessage(profile);await ls_addChatMessage('coach',msg);ui_addChatMessage('coach',msg);}catch(_){}}
-  else hist.forEach(m=>ui_addChatMessage(m.role,m.text));
+  const hist = await ls_getChatHistory();
+  if (hist.length === 0) {
+    try {
+      const msg = await claude_getWelcomeMessage(profile);
+      await ls_addChatMessage('coach', msg);
+      ui_addChatMessage('coach', msg);
+    } catch (e) {
+      console.error('Welcome message failed:', e);
+      const fallback = `Hi ${profile.name || 'there'}! I'm Aria, your health coach. Ask me anything about your nutrition, schedule, or goals.`;
+      await ls_addChatMessage('coach', fallback);
+      ui_addChatMessage('coach', fallback);
+    }
+  } else {
+    hist.forEach(m => ui_addChatMessage(m.role, m.text));
+  }
   ui_updateProfileScreen(profile);
 }
 
@@ -561,7 +755,30 @@ window.vitaApp={
   handleTextLog:async function(){const inp=document.getElementById('text-log-input');const text=inp?.value?.trim();if(!text)return;inp.value='';showScreen('log');ui_showProcessing('Analyzing with Aria…');try{const r=await claude_logMeal(text);await handleClaudeResult(r,'manual');}catch(e){ui_hideProcessing();ui_showToast(e.message||'Could not log — check API key in Profile','error');}},
   quickLog:async function(text){showScreen('log');ui_showProcessing(`Logging ${text}…`);try{const r=await claude_logMeal(text);await handleClaudeResult(r,'manual');}catch(e){ui_hideProcessing();ui_showToast(e.message||'Could not log','error');}},
   logWater:async function(amount){await ls_addWater(amount);await refreshDashboard();ui_showToast(`${amount*1000}ml water logged`,'success');},
-  sendCoachMessage:async function(text){const inp=document.getElementById('chat-input');const msg=text||inp?.value?.trim();if(!msg)return;if(inp)inp.value='';ui_addChatMessage('user',msg);await ls_addChatMessage('user',msg);ui_addChatMessage('coach','',true);try{const r=await claude_askCoach(msg);ui_removeTypingIndicator();const reply=r.text||r.meal?.coaching_note||'Got it!';ui_addChatMessage('coach',reply);await ls_addChatMessage('coach',reply);}catch(e){ui_removeTypingIndicator();ui_addChatMessage('coach',e.message?.includes('API key')?'Please add your Anthropic API key in Profile → API Setup.':'Aria is unavailable — try again.');}},
+  sendCoachMessage: async function(text) {
+    const input = document.getElementById('chat-input');
+    const msg = text || input?.value?.trim();
+    if (!msg) return;
+    if (input) input.value = '';
+
+    ui_addChatMessage('user', msg);
+    await ls_addChatMessage('user', msg);
+
+    ui_addChatMessage('coach', '', true);
+
+    try {
+      const result = await claude_askCoach(msg);
+      ui_removeTypingIndicator();
+      const reply = result.text || result.meal?.coaching_note || 'Got it!';
+      ui_addChatMessage('coach', reply);
+      await ls_addChatMessage('coach', reply);
+    } catch (e) {
+      ui_removeTypingIndicator();
+      console.error('Coach error:', e);
+      const errorText = `Aria is unavailable — ${e.message || 'unknown error'}. Try again.`;
+      ui_addChatMessage('coach', errorText);
+    }
+  },
   selectGoal:function(el){document.querySelectorAll('.goal-option').forEach(o=>o.classList.remove('selected'));el.classList.add('selected');_obData.primaryGoal=el.dataset.goal;const kcal=suggestCalories({..._obData});_obData.calGoal=kcal;Object.assign(_obData,suggestMacros(kcal,_obData.primaryGoal));},
   obNext:function(){
     if(_obStep===0){const name=document.getElementById('ob-name')?.value?.trim();const key=document.getElementById('ob-apikey')?.value?.trim();if(!name){ui_showToast('Please enter your name','error');return;}_obData.name=name;if(key){localStorage.setItem('vita_api_key',key);window._vitaConfig=window._vitaConfig||{};window._vitaConfig.anthropicKey=key;}}
