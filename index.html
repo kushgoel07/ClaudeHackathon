@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+  <title>Vita — AI Health Coach</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles/app.css">
+  <meta name="theme-color" content="#0d0d1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Vita">
+</head>
+<body>
+
+<script>
+  const _key = '__ANTHROPIC_KEY__';
+  if (!localStorage.getItem('vita_api_key')) localStorage.setItem('vita_api_key', _key);
+  window._vitaConfig = {
+    anthropicKey: localStorage.getItem('vita_api_key') || _key,
+    googleClientId: '__GOOGLE_CLIENT_ID__'
+  };
+</script>
+
+<script src="https://accounts.google.com/gsi/client" async></script>
+
+<div class="phone">
+  <div class="notch"></div>
+
+  <!-- ═══ ONBOARDING ═══ -->
+  <div class="screen active" id="screen-onboarding">
+    <div id="ob-wrap"></div>
+  </div>
+
+  <!-- ═══ HOME ═══ -->
+  <div class="screen" id="screen-home">
+    <div class="status">
+      <span class="status-time" id="status-time-home">9:41</span>
+      <div class="status-right"><div class="batt"></div></div>
+    </div>
+    <div class="offline-banner" id="offline-banner">No connection — changes saved locally</div>
+    <div class="scroll-content">
+      <div class="home-header">
+        <div class="home-eyebrow" id="home-date">Today</div>
+        <div class="home-title">Good morning,<br><em id="home-name">there</em></div>
+        <div class="pill" id="travel-pill" style="display:none">
+          <div class="pill-dot"></div>
+          <span class="pill-text" id="travel-pill-text">Travel mode active</span>
+        </div>
+      </div>
+
+      <div class="cal-card">
+        <div class="card-label">Today's intake</div>
+        <div class="cal-body">
+          <div class="ring-wrap">
+            <svg width="86" height="86" viewBox="0 0 86 86">
+              <circle cx="43" cy="43" r="32" fill="none" stroke="var(--surface2)" stroke-width="7"/>
+              <circle cx="43" cy="43" r="32" fill="none" stroke="var(--accent)" stroke-width="7"
+                stroke-dasharray="201" stroke-dashoffset="201" stroke-linecap="round"
+                transform="rotate(-90 43 43)" id="cal-ring-fill" style="transition:stroke-dashoffset 0.6s ease-out"/>
+            </svg>
+            <div class="ring-center">
+              <div class="ring-num" id="ring-kcal">0</div>
+              <div class="ring-of" id="ring-goal">/ 2000</div>
+            </div>
+          </div>
+          <div class="macro-list">
+            <div class="macro-row">
+              <div class="macro-row-top"><span class="macro-name">Protein</span><span class="macro-val" id="macro-protein">0 / 120g</span></div>
+              <div class="bar-track"><div class="bar-fill" id="bar-protein" style="width:0%;background:var(--accent)"></div></div>
+            </div>
+            <div class="macro-row">
+              <div class="macro-row-top"><span class="macro-name">Carbs</span><span class="macro-val" id="macro-carbs">0 / 220g</span></div>
+              <div class="bar-track"><div class="bar-fill" id="bar-carbs" style="width:0%;background:#4a80d4"></div></div>
+            </div>
+            <div class="macro-row">
+              <div class="macro-row-top"><span class="macro-name">Fat</span><span class="macro-val" id="macro-fat">0 / 70g</span></div>
+              <div class="bar-track"><div class="bar-fill" id="bar-fat" style="width:0%;background:#9980d4"></div></div>
+            </div>
+            <div class="macro-row">
+              <div class="macro-row-top"><span class="macro-name">Water</span><span class="macro-val" id="macro-water">0 / 2L</span></div>
+              <div class="bar-track"><div class="bar-fill" id="bar-water" style="width:0%;background:var(--sky)"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="coach-card" onclick="app.switchScreen('coach')" id="coach-hint-card">
+        <div class="coach-card-top"><div class="coach-dot"></div><span class="coach-label">Aria · Coach</span></div>
+        <div class="coach-msg" id="coach-hint-msg">Tap to chat with your AI health coach — she knows your schedule and goals.</div>
+      </div>
+
+      <div class="section-header">
+        <div class="section-title">Today's log</div>
+        <div class="section-link" onclick="app.switchScreen('log')">Add</div>
+      </div>
+      <div id="today-log-list">
+        <div class="empty-log">No meals logged yet.<br>Tap Log to add your first meal.</div>
+      </div>
+
+      <div class="section-header" style="margin-top:8px;display:none" id="cal-section-header">
+        <div class="section-title">Schedule context</div>
+        <div class="section-link" onclick="calendarClient.reconnect()">Sync</div>
+      </div>
+      <div class="cal-strip" id="cal-strip" style="display:none">
+        <div class="cal-strip-head">Today's calendar</div>
+        <div id="cal-events-list"></div>
+      </div>
+
+      <div style="height:20px"></div>
+    </div>
+
+    <div class="bottom-nav">
+      <div class="nav-item active" onclick="app.switchScreen('home')">
+        <div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+        <div class="nav-label">Today</div>
+      </div>
+      <div class="nav-item" onclick="app.switchScreen('log')">
+        <div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
+        <div class="nav-label">Log</div>
+      </div>
+      <div class="nav-item" onclick="app.switchScreen('coach')">
+        <div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <div class="nav-label">Coach</div>
+      </div>
+      <div class="nav-item" onclick="app.switchScreen('profile')">
+        <div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+        <div class="nav-label">Profile</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ LOG ═══ -->
+  <div class="screen" id="screen-log">
+
+    <!-- Voice overlay -->
+    <div class="listening-overlay" id="listening-overlay">
+      <div class="mic-visual">
+        <div class="mic-ring-outer"></div>
+        <div class="mic-ring-mid"></div>
+        <div class="mic-core">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M19 10a7 7 0 0 1-14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
+        </div>
+      </div>
+      <div class="waveform">
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+      </div>
+      <div class="listening-label">Listening</div>
+      <div class="listening-sub" id="transcript-text">Say what you ate…</div>
+      <div class="listening-cancel" onclick="voiceInput.stop()">Cancel</div>
+    </div>
+
+    <!-- Camera overlay -->
+    <div class="camera-overlay" id="camera-overlay">
+      <div class="camera-header">
+        <div class="camera-cancel" onclick="photoInput.cancel()">Cancel</div>
+        <div class="camera-title">Photo Log</div>
+        <div style="width:44px"></div>
+      </div>
+      <div class="camera-viewfinder">
+        <video id="camera-video" autoplay playsinline></video>
+        <canvas id="camera-canvas" style="display:none"></canvas>
+        <img id="camera-preview" style="display:none;width:100%;height:100%;object-fit:cover" alt="">
+      </div>
+      <div class="camera-controls">
+        <div class="shutter-btn" id="shutter-btn" onclick="photoInput.capture()">
+          <div class="shutter-inner"></div>
+        </div>
+        <div class="retake-btn" id="retake-btn" style="display:none" onclick="photoInput.retake()">Retake</div>
+      </div>
+      <div class="photo-confirm" id="photo-confirm" style="display:none">
+        <button class="btn-primary" onclick="photoInput.confirm()">Analyze this meal</button>
+      </div>
+    </div>
+
+    <div class="status"><span class="status-time">9:41</span><div class="status-right"><div class="batt"></div></div></div>
+    <div class="scroll-content">
+      <div class="log-screen-header">
+        <div class="log-screen-title">Log food</div>
+        <div class="log-screen-sub">Voice, photo, or type</div>
+      </div>
+
+      <div class="action-row">
+        <div class="action-btn" id="voice-btn" onclick="voiceInput.start()">
+          <div class="action-icon voice">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M19 10a7 7 0 0 1-14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
+          </div>
+          <div class="action-btn-label">Voice</div>
+          <div class="action-btn-sub">Tap and speak</div>
+        </div>
+        <div class="action-btn" onclick="photoInput.start()">
+          <div class="action-icon photo">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--sky)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M3 9a2 2 0 0 1 2-2h.93a2 2 0 0 0 1.66-.89l.82-1.22A2 2 0 0 1 10.07 4h3.86a2 2 0 0 1 1.66.89l.82 1.22A2 2 0 0 0 18.07 7H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          </div>
+          <div class="action-btn-label">Photo</div>
+          <div class="action-btn-sub">AI reads your meal</div>
+        </div>
+      </div>
+
+      <!-- Processing spinner -->
+      <div class="processing-card" id="processing-card" style="display:none">
+        <div class="processing-dots">
+          <div class="proc-dot"></div><div class="proc-dot"></div><div class="proc-dot"></div>
+        </div>
+        <div class="processing-text" id="processing-text">Analyzing…</div>
+      </div>
+
+      <!-- Parsed result -->
+      <div class="parsed-card" id="parsed-card">
+        <div class="parsed-head">
+          <div class="parsed-check">
+            <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#1d9e75" stroke-width="2.2" stroke-linecap="round"><polyline points="2 6 5 9 10 3"/></svg>
+          </div>
+          <span class="parsed-lbl">Aria identified</span>
+        </div>
+        <div class="parsed-food" id="parsed-food-name">Loading…</div>
+        <div class="parsed-macros">
+          <div class="parsed-macro"><div class="parsed-macro-val" id="pm-cal">—</div><div class="parsed-macro-name">kcal</div></div>
+          <div class="parsed-macro"><div class="parsed-macro-val" id="pm-pro">—</div><div class="parsed-macro-name">protein</div></div>
+          <div class="parsed-macro"><div class="parsed-macro-val" id="pm-carb">—</div><div class="parsed-macro-name">carbs</div></div>
+          <div class="parsed-macro"><div class="parsed-macro-val" id="pm-fat">—</div><div class="parsed-macro-name">fat</div></div>
+        </div>
+        <div class="parsed-note" id="parsed-note"></div>
+        <button class="parsed-confirm" onclick="vitaApp.confirmLog()">Add to log</button>
+      </div>
+
+      <!-- Text input -->
+      <div class="text-log-wrap">
+        <div class="text-log-label">Type it in</div>
+        <div class="text-log-row">
+          <input class="text-log-input" id="text-log-input" type="text"
+            placeholder='e.g. "large latte and a banana"' maxlength="500"
+            onkeydown="if(event.key==='Enter')vitaApp.handleTextLog()">
+          <button class="text-log-btn" onclick="vitaApp.handleTextLog()">Log</button>
+        </div>
+      </div>
+
+      <!-- Water chips -->
+      <div class="chip-section">
+        <div class="chip-section-label">Log water</div>
+        <div class="chip-grid">
+          <div class="chip" onclick="vitaApp.logWater(0.25)">250ml</div>
+          <div class="chip" onclick="vitaApp.logWater(0.5)">500ml</div>
+          <div class="chip" onclick="vitaApp.logWater(1)">1L</div>
+        </div>
+      </div>
+
+      <!-- Quick add chips -->
+      <div class="chip-section">
+        <div class="chip-section-label">Quick add</div>
+        <div class="chip-grid">
+          <div class="chip" onclick="vitaApp.quickLog('Black coffee')">Black coffee</div>
+          <div class="chip" onclick="vitaApp.quickLog('Banana')">Banana</div>
+          <div class="chip" onclick="vitaApp.quickLog('Protein bar, 200 calories')">Protein bar</div>
+          <div class="chip" onclick="vitaApp.quickLog('Apple')">Apple</div>
+          <div class="chip" onclick="vitaApp.quickLog('Protein shake with 30g protein powder')">Protein shake</div>
+          <div class="chip" onclick="vitaApp.quickLog('Greek yogurt, plain, 150g')">Greek yogurt</div>
+          <div class="chip" onclick="vitaApp.quickLog('2 scrambled eggs')">Eggs</div>
+          <div class="chip" onclick="vitaApp.quickLog('Grilled chicken breast 150g')">Chicken</div>
+          <div class="chip" onclick="vitaApp.quickLog('Handful of almonds')">Almonds</div>
+        </div>
+      </div>
+      <div style="height:20px"></div>
+    </div>
+
+    <div class="bottom-nav">
+      <div class="nav-item" onclick="app.switchScreen('home')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div><div class="nav-label">Today</div></div>
+      <div class="nav-item active" onclick="app.switchScreen('log')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div><div class="nav-label">Log</div></div>
+      <div class="nav-item" onclick="app.switchScreen('coach')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div class="nav-label">Coach</div></div>
+      <div class="nav-item" onclick="app.switchScreen('profile')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="nav-label">Profile</div></div>
+    </div>
+  </div>
+
+  <!-- ═══ COACH ═══ -->
+  <div class="screen" id="screen-coach">
+    <div class="status"><span class="status-time">9:41</span><div class="status-right"><div class="batt"></div></div></div>
+    <div class="coach-header">
+      <div class="coach-header-title">Aria</div>
+      <div class="coach-header-sub">Knows your calendar, goals, and log</div>
+      <div class="coach-online"><div class="coach-online-dot"></div><span class="coach-online-text">Context updated now</span></div>
+    </div>
+
+    <div class="chat-messages" id="chat-messages"></div>
+
+    <div class="suggest-chips">
+      <div class="suggest-chip" onclick="vitaApp.sendCoachMessage('Am I on track today?')">On track?</div>
+      <div class="suggest-chip" onclick="vitaApp.sendCoachMessage('What should I eat next?')">What to eat?</div>
+      <div class="suggest-chip" onclick="vitaApp.sendCoachMessage('How much water should I drink today?')">Water goal?</div>
+      <div class="suggest-chip" onclick="vitaApp.sendCoachMessage('Give me a quick high-protein snack idea')">Snack idea?</div>
+      <div class="suggest-chip" onclick="vitaApp.sendCoachMessage('How am I doing on protein today?')">Protein check?</div>
+      <div class="suggest-chip" onclick="vitaApp.sendCoachMessage('What should I know about eating before exercise?')">Pre-workout?</div>
+    </div>
+
+    <div class="chat-input-row">
+      <input class="chat-input" id="chat-input" type="text" placeholder="Ask Aria anything…"
+        onkeydown="if(event.key==='Enter')vitaApp.sendCoachMessage()">
+      <button class="chat-send" onclick="vitaApp.sendCoachMessage()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+      </button>
+    </div>
+
+    <div class="bottom-nav">
+      <div class="nav-item" onclick="app.switchScreen('home')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div><div class="nav-label">Today</div></div>
+      <div class="nav-item" onclick="app.switchScreen('log')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div><div class="nav-label">Log</div></div>
+      <div class="nav-item active" onclick="app.switchScreen('coach')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div class="nav-label">Coach</div></div>
+      <div class="nav-item" onclick="app.switchScreen('profile')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="nav-label">Profile</div></div>
+    </div>
+  </div>
+
+  <!-- ═══ PROFILE ═══ -->
+  <div class="screen" id="screen-profile">
+    <div class="status"><span class="status-time">9:41</span><div class="status-right"><div class="batt"></div></div></div>
+    <div class="scroll-content">
+      <div class="profile-top-section">
+        <div class="profile-row">
+          <div class="profile-avatar"><span class="avatar-initials" id="profile-initials">?</span></div>
+          <div>
+            <div class="profile-name" id="profile-name-display">Your Name</div>
+            <div class="profile-role" id="profile-goal-display">Goal not set</div>
+          </div>
+        </div>
+        <div class="streak-badge"><span class="streak-text" id="streak-text">0-day streak</span></div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-card"><div class="stat-val" id="stat-kcal">2000</div><div class="stat-lbl">Cal goal</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-protein">120g</div><div class="stat-lbl">Protein</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-water">2L</div><div class="stat-lbl">Water</div></div>
+      </div>
+
+      <div class="section-header"><div class="section-title">Integrations</div></div>
+      <div class="settings-section">
+        <div class="settings-row">
+          <div class="settings-left">
+            <div class="settings-icon-wrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+            <div class="settings-name">Google Calendar</div>
+          </div>
+          <div class="toggle" id="cal-toggle" onclick="calendarClient.toggleConnection()"></div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-left">
+            <div class="settings-icon-wrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+            <div class="settings-name">Smart notifications</div>
+          </div>
+          <div class="toggle" id="notif-toggle" onclick="notificationManager.toggle()"></div>
+        </div>
+        <div class="settings-row" onclick="vitaApp.resetOnboarding()">
+          <div class="settings-left">
+            <div class="settings-icon-wrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+            <div class="settings-name">Edit profile &amp; goals</div>
+          </div>
+          <div class="caret">›</div>
+        </div>
+      </div>
+
+      <div class="section-header" style="margin-top:10px"><div class="section-title">API Setup</div></div>
+      <div class="settings-section">
+        <div class="settings-row" onclick="vitaApp.showApiKeyEditor()">
+          <div class="settings-left">
+            <div class="settings-icon-wrap">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+            </div>
+            <div class="settings-name">Anthropic API Key</div>
+          </div>
+          <div class="settings-val" id="api-key-status">Not set</div>
+        </div>
+      </div>
+
+      <div style="height:20px"></div>
+    </div>
+
+    <div class="bottom-nav">
+      <div class="nav-item" onclick="app.switchScreen('home')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div><div class="nav-label">Today</div></div>
+      <div class="nav-item" onclick="app.switchScreen('log')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div><div class="nav-label">Log</div></div>
+      <div class="nav-item" onclick="app.switchScreen('coach')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div class="nav-label">Coach</div></div>
+      <div class="nav-item active" onclick="app.switchScreen('profile')"><div class="nav-icon"><svg class="nsv" width="20" height="20" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="nav-label">Profile</div></div>
+    </div>
+  </div>
+
+</div><!-- /.phone -->
+
+<!-- API Key Modal -->
+<div class="modal-overlay" id="api-key-modal" style="display:none" onclick="if(event.target===this)vitaApp.closeModal('api-key-modal')">
+  <div class="modal">
+    <div class="modal-title">Anthropic API Key</div>
+    <div class="modal-sub">Get yours free at console.anthropic.com</div>
+    <input class="modal-input" id="api-key-input" type="password" placeholder="sk-ant-..."
+      onkeydown="if(event.key==='Enter')vitaApp.saveApiKey()">
+    <button class="btn-primary modal-btn" onclick="vitaApp.saveApiKey()">Save key</button>
+    <button class="btn-ghost modal-btn" onclick="vitaApp.closeModal('api-key-modal')">Cancel</button>
+  </div>
+</div>
+
+<script>
+  window.addEventListener('online',  () => document.getElementById('offline-banner')?.classList.remove('visible'));
+  window.addEventListener('offline', () => document.getElementById('offline-banner')?.classList.add('visible'));
+</script>
+
+<script type="module" src="/src/app.js"></script>
+</body>
+</html>
