@@ -48,7 +48,8 @@ async function init() {
       await handleClaudeResult(result, 'photo');
     } catch (e) {
       ui.hideProcessing();
-      ui.showToast('Could not read photo — type it instead', 'error');
+      ui.showToast(e.message || 'Could not read photo — type it instead', 'error');
+      console.error('photo log failed:', e);
     }
   });
 

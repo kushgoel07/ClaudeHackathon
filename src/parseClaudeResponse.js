@@ -9,8 +9,15 @@ export function parseClaudeResponse(responseText, type) {
     .replace(/\s*```$/, '')
     .trim();
 
+  let jsonCandidate = cleaned;
+  const braceStart = cleaned.indexOf('{');
+  const braceEnd = cleaned.lastIndexOf('}');
+  if (braceStart !== -1 && braceEnd > braceStart) {
+    jsonCandidate = cleaned.slice(braceStart, braceEnd + 1);
+  }
+
   try {
-    const meal = JSON.parse(cleaned);
+    const meal = JSON.parse(jsonCandidate);
     const required = ['meal', 'kcal', 'protein_g', 'carbs_g', 'fat_g'];
     for (const f of required) {
       if (meal[f] === undefined) throw new Error('missing ' + f);

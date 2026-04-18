@@ -20,18 +20,29 @@ export async function start() {
   retakeBtn.style.display = 'none';
   photoConfirm.style.display = 'none';
   capturedBase64 = null;
+  overlay.classList.add('active');
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    overlay.classList.remove('active');
+    alert('Camera requires a secure context. Open this app over https:// or via localhost.');
+    return;
+  }
 
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }
     });
     video.srcObject = stream;
-    overlay.classList.add('active');
   } catch (e) {
+    overlay.classList.remove('active');
     if (e.name === 'NotAllowedError') {
       alert('Camera permission denied. Please allow camera access in Settings.');
+    } else if (e.name === 'NotFoundError') {
+      alert('No camera found on this device. Please type what you ate instead.');
+    } else if (e.name === 'NotReadableError') {
+      alert('Camera is in use by another app. Close it and try again.');
     } else {
-      alert('Camera not available. Please type what you ate instead.');
+      alert('Camera unavailable (' + (e.name || 'error') + '). Please type what you ate instead.');
     }
   }
 }
@@ -43,6 +54,11 @@ export function capture() {
   const shutterBtn = document.getElementById('shutter-btn');
   const retakeBtn = document.getElementById('retake-btn');
   const photoConfirm = document.getElementById('photo-confirm');
+
+  if (!video.videoWidth || video.readyState < 2) {
+    alert('Camera still starting — please wait a moment and try again.');
+    return;
+  }
 
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
