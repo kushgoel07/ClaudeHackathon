@@ -426,28 +426,7 @@ function suggestCalories(p){const{age=30,sex='male',primaryGoal='Maintain weight
 function suggestMacros(kcal,primaryGoal=''){const g=primaryGoal.toLowerCase();let pp=0.30,cp=0.40,fp=0.30;if(g.includes('build')||g.includes('muscle')){pp=0.35;cp=0.40;fp=0.25;}if(g.includes('lose')){pp=0.35;cp=0.35;fp=0.30;}return{proteinGoal:Math.round((kcal*pp)/4),carbGoal:Math.round((kcal*cp)/4),fatGoal:Math.round((kcal*fp)/9),fiberGoal:25,waterGoal:2};}
 
 // ═══ PARSE RESPONSE ═══
-function parseClaudeResponse(responseText, type) {
-  const text = (responseText || '').trim();
-  if (!text) throw new Error('Empty response from Aria');
-  if (type === 'coach_question') return { type: 'coach', text };
-
-  const cleaned = text.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
-  try {
-    const meal = JSON.parse(cleaned);
-    for (const f of ['meal', 'kcal', 'protein_g', 'carbs_g', 'fat_g']) {
-      if (meal[f] === undefined) throw new Error('missing ' + f);
-    }
-    meal.kcal = Number(meal.kcal) || 0;
-    meal.protein_g = Number(meal.protein_g) || 0;
-    meal.carbs_g = Number(meal.carbs_g) || 0;
-    meal.fat_g = Number(meal.fat_g) || 0;
-    meal.fiber_g = Number(meal.fiber_g) || 0;
-    if (meal.kcal < 20) return { type: 'water', amount_l: 0.25, note: meal.meal };
-    return { type: 'meal', meal };
-  } catch (_) {
-    return { type: 'coach', text };
-  }
-}
+function parseClaudeResponse(responseText,type){if(type==='coach_question')return{type:'coach',text:responseText.trim()};const c=responseText.replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();const bs=c.indexOf('{'),be=c.lastIndexOf('}');const cand=(bs!==-1&&be>bs)?c.slice(bs,be+1):c;try{const m=JSON.parse(cand);for(const f of['meal','kcal','protein_g','carbs_g','fat_g'])if(m[f]===undefined)throw new Error('missing '+f);m.kcal=Number(m.kcal)||0;m.protein_g=Number(m.protein_g)||0;m.carbs_g=Number(m.carbs_g)||0;m.fat_g=Number(m.fat_g)||0;m.fiber_g=Number(m.fiber_g)||0;if(m.kcal<20)return{type:'water',amount_l:0.25,note:m.meal};return{type:'meal',meal:m};}catch(_){return{type:'coach',text:responseText.trim()};}}
 
 // ═══ CONTEXT BUILDER ═══
 const SYS_TMPL=`You are Aria, a personal health coach inside the Vita app. Be warm, specific, and brief.\nNever give generic advice — always reference the user's actual data below.\n\n## User Profile\nName: {name} | Age: {age} | Sex: {sex}\nGoal: {primaryGoal}\nDaily targets: {calGoal} kcal | {proteinGoal}g protein | {carbGoal}g carbs | {fatGoal}g fat | {fiberGoal}g fiber | {waterGoal}L water\n\n## Current Time\n{currentTime} on {currentDate} ({dayOfWeek})\n\n## Today's Food Log ({totalKcal} kcal so far)\n{foodLogSummary}\n\n## Today's Calendar Events\n{calendarEvents}\n\n## Hydration\n{waterLoggedL}L of {waterGoal}L consumed today\n\n## Instructions\n- For meal logs: respond ONLY with valid JSON in the format specified.\n- For coach questions: respond in plain text, 2-4 sentences max.\n- Always reference specific numbers from the user's data, never speak in generalities.`;
@@ -479,8 +458,8 @@ function voice_stop(){_recognition?.stop();document.getElementById('listening-ov
 // ═══ PHOTO INPUT ═══
 let _stream=null,_capturedB64=null,_photoOnCapture=null;
 function photo_init(cb){_photoOnCapture=cb;}
-async function photo_start(){const ov=document.getElementById('camera-overlay'),vid=document.getElementById('camera-video'),prev=document.getElementById('camera-preview'),sBtn=document.getElementById('shutter-btn'),rBtn=document.getElementById('retake-btn'),conf=document.getElementById('photo-confirm');prev.style.display='none';vid.style.display='block';sBtn.style.display='flex';rBtn.style.display='none';conf.style.display='none';_capturedB64=null;try{_stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280}}});vid.srcObject=_stream;ov.classList.add('active');}catch(e){if(e.name==='NotAllowedError')alert('Camera permission denied. Please allow in Settings.');else alert('Camera not available. Please type what you ate instead.');}}
-function photo_capture(){const vid=document.getElementById('camera-video'),canvas=document.getElementById('camera-canvas'),prev=document.getElementById('camera-preview');canvas.width=vid.videoWidth;canvas.height=vid.videoHeight;canvas.getContext('2d').drawImage(vid,0,0);const url=canvas.toDataURL('image/jpeg',0.85);_capturedB64=url.split(',')[1];prev.src=url;prev.style.display='block';vid.style.display='none';document.getElementById('shutter-btn').style.display='none';document.getElementById('retake-btn').style.display='block';document.getElementById('photo-confirm').style.display='block';photo_stopStream();}
+async function photo_start(){const ov=document.getElementById('camera-overlay'),vid=document.getElementById('camera-video'),prev=document.getElementById('camera-preview'),sBtn=document.getElementById('shutter-btn'),rBtn=document.getElementById('retake-btn'),conf=document.getElementById('photo-confirm');prev.style.display='none';vid.style.display='block';sBtn.style.display='flex';rBtn.style.display='none';conf.style.display='none';_capturedB64=null;ov.classList.add('active');if(!navigator.mediaDevices?.getUserMedia){ov.classList.remove('active');alert('Camera requires a secure context. Open this app over https:// or via localhost.');return;}try{_stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280}}});vid.srcObject=_stream;}catch(e){ov.classList.remove('active');if(e.name==='NotAllowedError')alert('Camera permission denied. Please allow camera access in Settings.');else if(e.name==='NotFoundError')alert('No camera found on this device. Please type what you ate instead.');else if(e.name==='NotReadableError')alert('Camera is in use by another app. Close it and try again.');else alert('Camera unavailable ('+(e.name||'error')+'). Please type what you ate instead.');}}
+function photo_capture(){const vid=document.getElementById('camera-video'),canvas=document.getElementById('camera-canvas'),prev=document.getElementById('camera-preview');if(!vid.videoWidth||vid.readyState<2){alert('Camera still starting — please wait a moment and try again.');return;}canvas.width=vid.videoWidth;canvas.height=vid.videoHeight;canvas.getContext('2d').drawImage(vid,0,0);const url=canvas.toDataURL('image/jpeg',0.85);_capturedB64=url.split(',')[1];prev.src=url;prev.style.display='block';vid.style.display='none';document.getElementById('shutter-btn').style.display='none';document.getElementById('retake-btn').style.display='block';document.getElementById('photo-confirm').style.display='block';photo_stopStream();}
 function photo_retake(){_capturedB64=null;photo_start();}
 function photo_confirm(){if(!_capturedB64)return;document.getElementById('camera-overlay').classList.remove('active');_photoOnCapture?.(_capturedB64,'image/jpeg');}
 function photo_cancel(){photo_stopStream();_capturedB64=null;document.getElementById('camera-overlay').classList.remove('active');}
